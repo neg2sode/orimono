@@ -9,7 +9,7 @@ import { History } from './history';
 import { computeLayout, dropIndex, hitTest, inNumberLane, touchStripTarget, type Layout, type Target } from './layout';
 import {
   clearRect, copyRect, deleteCell, deleteGroups, duplicateGroups, fresh, getHit, insertAfter, insertFront,
-  insertBack, isBoundary, merge, mergeGroups, moveGroups, parse, pasteClip, recolour, setBpm, setHit, split, type Clip, type Pattern,
+  insertBack, isBoundary, merge, mergeGroups, moveGroups, parse, pasteClip, recolour, runs, setBpm, setHit, split, type Clip, type Pattern, type Rect,
 } from './model';
 import { randomFill } from './random';
 import { Renderer, type ViewState } from './render';
@@ -50,8 +50,10 @@ const scheduler = new Scheduler(engine, pattern);
 const renderer = new Renderer(canvas);
 
 const view: ViewState = {
-  tool: 'draw', hover: { kind: 'none' }, rect: null, groupSel: null, drop: null, playheadId: null, hold: null, stripSel: null,
+  tool: 'draw', hover: { kind: 'none' }, rect: null, groupSel: null, drop: null, playheadId: null, hold: null, stripSel: null, rowSel: null,
 };
+let lastPointer = 'mouse'; // 'touch' shows Copy / Paste buttons for a selection
+let touchColW: number | null = null; // touch number menu open: columns hold still
 let clip: Clip | null = null;
 let layout: Layout = computeLayout(pattern(), stage.clientWidth, stage.clientHeight);
 let shiftHeld = false;
@@ -116,10 +118,25 @@ function setTool(tool: 'draw' | 'select') {
 
 function clearSelection() {
   view.stripSel = null;
+  touchColW = null;
+  view.rowSel = null;
   view.rect = null;
   view.groupSel = null;
   view.drop = null;
   showActions();
+}
+
+/** The selected area as a rectangle, whatever was picked: groups (all rows), rows (all threads),
+ * or a free rectangle. Random, Clear, Copy and Paste all work on it. */
+function selRect(): Rect | null {
+  const n = pattern().threads.length, last = ROWS.length - 1;
+  if (view.groupSel) {
+    const rs = runs(pattern());
+    const a = rs[view.groupSel[0]], b = rs[view.groupSel[1]];
+    return a && b ? { t0: a.start, t1: b.end - 1, r0: 0, r1: last } : null;
+  }
+  if (view.rowSel) return { t0: 0, t1: n - 1, r0: view.rowSel[0], r1: view.rowSel[1] };
+  return view.rect;
 }
 
 /** Structure edits move indices around, so selections are dropped after them. */
@@ -137,19 +154,35 @@ document.addEventListener('click', (e) => {
 $('play').onclick = togglePlay;
 $('random').onclick = () => {
   engine.resume();
-  history.apply(randomFill(pattern(), view.rect));
+  history.apply(randomFill(pattern(), selRect()));
 };
+$('clear').onclick = doClearRect;
 $('undo').onclick = () => { history.undo(); clearSelection(); };
 $('redo').onclick = () => { history.redo(); clearSelection(); };
 $('tool-draw').onclick = () => setTool('draw');
 $('tool-select').onclick = () => setTool('select');
 $('sounds').onclick = () => $<HTMLDialogElement>('credits').showModal();
 
-$('new').onclick = () => {
-  const f = fresh();
-  f.bpm = pattern().bpm;
-  applyStructure(f);
-};
+// New sits behind the length readout: picking it shows what it does before it does it.
+{
+  const pop = $('new-pop');
+  const close = () => { pop.hidden = true; $('length').classList.remove('on'); };
+  $('length').onclick = (e) => {
+    e.stopPropagation();
+    const open = pop.hidden;
+    close();
+    if (open) { pop.hidden = false; $('length').classList.add('on'); }
+  };
+  $('new').onclick = () => {
+    const f = fresh();
+    f.bpm = pattern().bpm;
+    applyStructure(f);
+    close();
+  };
+  document.addEventListener('pointerdown', (e) => {
+    if (!pop.hidden && !(e.target as HTMLElement).closest('#new-pop, #length')) close();
+  });
+}
 
 // Tempo knob: drag up/down (Shift for finer), scroll, arrow keys, or double-click to type.
 // The knob works on a log scale, so slow tempos get fine control (about 3 px per BPM near 72,
@@ -244,11 +277,19 @@ function showActions() {
       button('Delete', doDeleteGroups, { danger: true }),
     );
     const x = (L.xs[L.runs[a].start] + L.xs[L.runs[b].end - 1]) / 2;
-    place(x, L.bandTop + L.bandH + 10);
+    place(x, L.numTop - (lastPointer === "touch" ? 66 : 50)); // above the numbers: below the band is off-screen
   } else if (view.stripSel !== null) {
     // Touch: one number's actions as big buttons, instead of the fine targets made for a pointer.
     const ti = view.stripSel, p = pattern(), n = p.threads.length;
-    const keep = (next: Pattern, sel: number | null) => { applyStructure(next); view.stripSel = sel; showActions(); };
+    // Like repeated clicks with a pointer: columns hold still while this menu is open, so the
+    // number stays under the menu; they re-fit when it closes.
+    const keep = (next: Pattern, sel: number | null) => {
+      const w = touchColW;
+      applyStructure(next);
+      view.stripSel = sel;
+      touchColW = sel === null ? null : w;
+      showActions();
+    };
     actions.append(
       button('+ cell', () => keep(insertAfter(p, ti), ti)),
       button('– cell', () => keep(deleteCell(p, ti), n > 1 ? Math.min(ti, n - 2) : null), { danger: true, disabled: n <= 1 }),
@@ -259,17 +300,13 @@ function showActions() {
         : []),
     );
     place(L.xs[ti], L.numTop - 60);
-  } else if (view.rect) {
-    const r = view.rect;
-    actions.append(
-      button('Clear', doClearRect, { danger: true }),
-      button('Copy', doCopy),
-      button('Paste', doPaste, { disabled: !clip }),
-      button('Random', () => history.apply(randomFill(pattern(), view.rect))),
-    );
+  } else if (lastPointer === 'touch' && selRect()) {
+    // Touch has no ⌘C / ⌘V, so a selection offers them as buttons. (Random and Clear are in the toolbar.)
+    const r = selRect()!;
+    actions.append(button('Copy', doCopy), button('Paste', doPaste, { disabled: !clip }));
     const x = (L.xs[r.t0] + L.xs[r.t1]) / 2;
     const below = L.top + (r.r1 + 1) * L.rowH + 6;
-    place(x, r.r1 > ROWS.length - 5 ? L.top + r.r0 * L.rowH - 46 : below);
+    place(x, r.r1 > ROWS.length - 5 ? L.top + r.r0 * L.rowH - 60 : below);
   }
   actions.hidden = !actions.childElementCount;
 }
@@ -298,15 +335,19 @@ function doDeleteGroups() {
   if (!view.groupSel) return;
   applyStructure(deleteGroups(pattern(), ...view.groupSel));
 }
+/** Clear notes in the selection, or everywhere if nothing is selected. Groups stay. */
 function doClearRect() {
-  if (view.rect) history.apply(clearRect(pattern(), view.rect));
+  const all = { t0: 0, t1: pattern().threads.length - 1, r0: 0, r1: ROWS.length - 1 };
+  history.apply(clearRect(pattern(), selRect() ?? all));
 }
 function doCopy() {
-  if (view.rect) clip = copyRect(pattern(), view.rect);
+  const r = selRect();
+  if (r) clip = copyRect(pattern(), r);
   showActions();
 }
 function doPaste() {
-  if (view.rect && clip) history.apply(pasteClip(pattern(), clip, view.rect.t0, view.rect.r0));
+  const r = selRect();
+  if (r && clip) history.apply(pasteClip(pattern(), clip, r.t0, r.r0));
 }
 
 // ---------------------------------------------------------------- pointer gestures
@@ -316,6 +357,7 @@ type Gesture =
   | { kind: 'pluck'; ti: number; ri: number; x0: number; v0: number }
   | { kind: 'rect'; ti: number; ri: number }
   | { kind: 'band-select'; anchor: number }
+  | { kind: 'row-select'; anchor: number }
   | { kind: 'band-move'; a: number; b: number; x0: number; moved: boolean; run: number }
   | { kind: 'strip'; target: Target | { kind: 'num'; ti: number } };
 
@@ -354,10 +396,23 @@ canvas.addEventListener('pointerdown', (e) => {
   const { x, y } = point(e);
   const t = hitTest(layout, pattern(), x, y);
   canvas.setPointerCapture(e.pointerId);
+  lastPointer = e.pointerType;
+
+  if (t.kind === 'label') {
+    if (!selecting()) { clearSelection(); preview(ROWS[t.ri], DEFAULT_VELOCITY); return; }
+    const sel = view.rowSel;
+    const anchor = sel && e.shiftKey ? (t.ri >= sel[0] ? sel[0] : sel[1]) : t.ri;
+    clearSelection();
+    view.rowSel = [Math.min(anchor, t.ri), Math.max(anchor, t.ri)];
+    gesture = { kind: 'row-select', anchor };
+    showActions();
+    return;
+  }
 
   if (t.kind === 'cell') {
     if (selecting()) {
       view.groupSel = null;
+      view.rowSel = null;
       gesture = { kind: 'rect', ti: t.ti, ri: t.ri };
       view.rect = { t0: t.ti, t1: t.ti, r0: t.ri, r1: t.ri };
       showActions();
@@ -383,6 +438,7 @@ canvas.addEventListener('pointerdown', (e) => {
       return;
     }
     view.rect = null;
+    view.rowSel = null;
     const sel = view.groupSel;
     if (sel && t.run >= sel[0] && t.run <= sel[1] && !e.shiftKey) {
       gesture = { kind: 'band-move', a: sel[0], b: sel[1], x0: x, moved: false, run: t.run };
@@ -403,6 +459,7 @@ canvas.addEventListener('pointerdown', (e) => {
       const again = view.stripSel === tt.ti;
       clearSelection();
       view.stripSel = again ? null : tt.ti;
+      if (!again) touchColW = layout.colW;
       showActions();
     } else gesture = { kind: 'strip', target: tt };
     return;
@@ -431,7 +488,7 @@ canvas.addEventListener('pointermove', (e) => {
   const t = hitTest(layout, pattern(), x, y);
   if (!gesture) {
     view.hover = selecting() && t.kind === 'cell' ? { kind: 'none' } : t;
-    canvas.style.cursor = t.kind === 'none' ? 'default' : t.kind === 'band' && selecting() ? 'grab' : t.kind === 'band' ? 'copy' : 'pointer';
+    canvas.style.cursor = t.kind === 'none' ? 'default' : t.kind === 'label' ? 'pointer' : t.kind === 'band' && selecting() ? 'grab' : t.kind === 'band' ? 'copy' : 'pointer';
     return;
   }
   const g = gesture;
@@ -462,6 +519,10 @@ canvas.addEventListener('pointermove', (e) => {
       };
       showActions();
     }
+  } else if (g.kind === 'row-select') {
+    const ri = Math.max(0, Math.min(ROWS.length - 1, Math.floor((y - layout.top) / layout.rowH)));
+    view.rowSel = [Math.min(g.anchor, ri), Math.max(g.anchor, ri)];
+    showActions();
   } else if (g.kind === 'band-select') {
     if (t.kind === 'band') {
       view.groupSel = [Math.min(g.anchor, t.run), Math.max(g.anchor, t.run)];
@@ -537,7 +598,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 'Delete' || e.key === 'Backspace') {
     e.preventDefault();
     if (view.groupSel) doDeleteGroups();
-    else doClearRect();
+    else if (selRect()) doClearRect(); // the key never clears everything; the Clear button can
   }
   else if (e.key.toLowerCase() === 'd') setTool('draw');
   else if (e.key.toLowerCase() === 's') setTool('select');
@@ -555,7 +616,7 @@ const SWING_CELLS: Partial<Record<RowTag, number>> = { BD: 1.6, FT: 1.4, HT: 1.2
 
 function frame() {
   const p = pattern();
-  layout = computeLayout(p, stage.clientWidth, stage.clientHeight, stripAnchor?.colW);
+  layout = computeLayout(p, stage.clientWidth, stage.clientHeight, stripAnchor?.colW ?? touchColW ?? undefined);
   if (stripAnchor && !gesture) view.hover = hitTest(layout, p, stripAnchor.x, stripAnchor.y);
   const cell = threadSeconds(p.bpm);
   for (const f of scheduler.due()) {
@@ -568,7 +629,7 @@ function frame() {
       renderer.pluck(f.threadId, 0.8 + 2.2 * v, tau, freq);
     }
   }
-  renderer.draw(p, layout, view);
+  renderer.draw(p, layout, { ...view, rect: selRect() });
   requestAnimationFrame(frame);
 }
 

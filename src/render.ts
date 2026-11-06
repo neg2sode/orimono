@@ -15,6 +15,8 @@ export interface ViewState {
   hold: { threadId: number; ri: number; dx: number } | null;
   /** Touch: the number whose menu is open. */
   stripSel: number | null;
+  /** Whole rows picked by their name tags. */
+  rowSel: [number, number] | null;
 }
 
 interface Wobble { amp: number; t0: number; freq: number; tau: number }
@@ -111,7 +113,8 @@ export class Renderer {
       ctx.moveTo(LABEL_W - 6, Math.round(y) + 0.5);
       ctx.lineTo(xs[xs.length - 1] + L.colW / 2, Math.round(y) + 0.5);
       ctx.stroke();
-      const hot = s.hover.kind === 'cell' && s.hover.ri === ri;
+      const hot = ((s.hover.kind === 'cell' || s.hover.kind === 'label') && s.hover.ri === ri)
+        || (!!s.rowSel && ri >= s.rowSel[0] && ri <= s.rowSel[1]);
       roundRect(ctx, 10, y - 8, 30, 16, 3);
       ctx.fillStyle = hot ? UI.text : UI.tag;
       ctx.fill();

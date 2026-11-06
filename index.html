@@ -29,9 +29,17 @@
         <button id="undo" title="Undo (⌘Z)">Undo</button>
         <button id="redo" title="Redo (⇧⌘Z)">Redo</button>
       </div>
-      <button id="new" title="Start again from 4+4+4+4 (undoable)">New</button>
+      <button id="clear" title="Clear notes in the selection, or all notes if nothing is selected. Groups stay. (Undoable)">Clear</button>
       <div class="panel-end">
-        <div class="readout"><span id="len">16 threads</span><span id="secs">3.33 s</span></div>
+        <div class="length-wrap">
+          <button id="length" class="readout" title="Length. Click for New pattern">
+            <span id="len">16 threads</span><span id="secs">3.33 s</span>
+          </button>
+          <div id="new-pop" hidden>
+            <p>Start again from 4+4+4+4?<br /><small>This resets your groups as well as your notes. (Undoable)</small></p>
+            <button id="new" class="danger">New pattern</button>
+          </div>
+        </div>
         <div class="divider" aria-hidden="true"></div>
         <button id="sounds" class="ghost" title="Where the sounds come from">Sounds</button>
       </div>

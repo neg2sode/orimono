@@ -87,11 +87,13 @@ export type Target =
   | { kind: 'split'; g: number }
   | { kind: 'merge'; g: number }
   | { kind: 'band'; run: number }
+  | { kind: 'label'; ri: number } // a row's name tag
   | { kind: 'none' };
 
 export function hitTest(L: Layout, p: Pattern, x: number, y: number): Target {
   const n = L.xs.length;
   if (y >= L.top && y < L.bottom) {
+    if (x < LABEL_W - 8) return { kind: 'label', ri: Math.floor((y - L.top) / L.rowH) };
     const ti = threadAtX(L, x);
     if (ti < 0) return { kind: 'none' };
     return { kind: 'cell', ti, ri: Math.floor((y - L.top) / L.rowH) };
