@@ -1,0 +1,6 @@
+node_modules
+dist
+.DS_Store
+# The kit is committed only once it's built from CC0 sources (Virtuosity Drums, VCSL, FreePats).
+public/kit/
+__pycache__/

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Orimono</title>
+  </head>
+  <body>
+    <header id="panel">
+      <div class="brand">Orimono</div>
+      <button id="play" class="primary" title="Play / Stop (Space)" disabled>Play</button>
+      <div class="tempo">
+        <div id="knob" class="knob" title="Tempo: drag up/down or scroll. Double-click to type." tabindex="0">
+          <svg viewBox="0 0 48 48" aria-hidden="true">
+            <circle cx="24" cy="24" r="19" class="knob-body" />
+            <path id="knob-arc" class="knob-arc" d="" />
+            <line id="knob-tick" x1="24" y1="24" x2="24" y2="9" class="knob-tick" />
+          </svg>
+        </div>
+        <div class="bpm"><span id="bpm">120</span><small>BPM</small></div>
+        <input id="bpm-input" type="number" min="40" max="300" step="0.1" hidden />
+      </div>
+      <button id="random" class="primary" title="Random: fill your groups with a pattern">Random</button>
+      <div class="seg" role="group" aria-label="Tool">
+        <button id="tool-draw" class="on" title="Draw (D): tap, swipe, long-press to pluck">Draw</button>
+        <button id="tool-select" title="Select (S, or hold Shift): rectangle in the grid, groups in the band">Select</button>
+      </div>
+      <div class="seg">
+        <button id="undo" title="Undo (⌘Z)">Undo</button>
+        <button id="redo" title="Redo (⇧⌘Z)">Redo</button>
+      </div>
+      <div class="readout"><span id="len">16 threads</span><span id="secs">2.00 s</span></div>
+      <button id="new" class="ghost" title="Start again from 4+4+4+4 (undoable)">New</button>
+    </header>
+    <main id="stage">
+      <canvas id="grid"></canvas>
+      <div id="actions" hidden></div>
+    </main>
+    <div id="loading">Loading sounds…</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

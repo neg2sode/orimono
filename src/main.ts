@@ -1,0 +1,520 @@
+import '@fontsource/space-grotesk/400.css';
+import '@fontsource/space-grotesk/500.css';
+import '@fontsource/space-grotesk/600.css';
+import './style.css';
+
+import { BPM_MAX, BPM_MIN, DEFAULT_VELOCITY, ROWS, threadSeconds, type RowTag } from './constants';
+import { Engine } from './audio';
+import { History } from './history';
+import { computeLayout, dropIndex, hitTest, type Layout, type Target } from './layout';
+import {
+  clearRect, copyRect, deleteCell, deleteGroups, duplicateGroups, fresh, getHit, insertAfter, insertFront,
+  merge, mergeGroups, moveGroups, parse, pasteClip, recolour, setBpm, setHit, split, type Clip, type Pattern,
+} from './model';
+import { randomFill } from './random';
+import { Renderer, type ViewState } from './render';
+import { Scheduler } from './scheduler';
+
+const STORE_KEY = 'orimono.pattern.v1';
+const OLD_STORE_KEY = 'rubber-grid.pattern.v1'; // name before 6 Nov 2026
+const HOLD_MS = 400; // long press → pluck
+const MOVE_TOLERANCE = 8; // px of movement allowed before a press becomes a swipe
+
+const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+const canvas = $<HTMLCanvasElement>('grid');
+const stage = $<HTMLElement>('stage');
+const actions = $<HTMLDivElement>('actions');
+
+// ---------------------------------------------------------------- state
+
+function loadSaved(): Pattern {
+  try {
+    const raw = localStorage.getItem(STORE_KEY) ?? localStorage.getItem(OLD_STORE_KEY);
+    if (raw) return parse(JSON.parse(raw)) ?? fresh();
+  } catch {
+    /* ignore a broken save */
+  }
+  return fresh();
+}
+
+let saveTimer = 0;
+const history = new History(loadSaved(), () => {
+  window.clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(() => localStorage.setItem(STORE_KEY, JSON.stringify(history.current)), 300);
+  updatePanel();
+});
+const pattern = () => history.current;
+
+const engine = new Engine();
+const scheduler = new Scheduler(engine, pattern);
+const renderer = new Renderer(canvas);
+
+const view: ViewState = {
+  tool: 'draw', hover: { kind: 'none' }, rect: null, groupSel: null, drop: null, playheadId: null, hold: null,
+};
+let clip: Clip | null = null;
+let layout: Layout = computeLayout(pattern(), stage.clientWidth, stage.clientHeight);
+let shiftHeld = false;
+const selecting = () => view.tool === 'select' || shiftHeld;
+
+// ---------------------------------------------------------------- loading
+
+engine
+  .load(undefined, (done, total) => ($('loading').textContent = `Loading sounds… ${done}/${total}`))
+  .then(() => {
+    $('loading').remove();
+    $<HTMLButtonElement>('play').disabled = false;
+  })
+  .catch((err) => {
+    console.error(err);
+    $('loading').textContent = 'Could not load the sounds. Run "npm run kit", then reload.';
+    $('loading').classList.add('error');
+  });
+
+// ---------------------------------------------------------------- panel
+
+function updatePanel() {
+  const p = pattern();
+  $('bpm').textContent = p.bpm.toFixed(p.bpm % 1 ? 1 : 0);
+  $('len').textContent = `${p.threads.length} thread${p.threads.length === 1 ? '' : 's'}`;
+  $('secs').textContent = `${(p.threads.length * threadSeconds(p.bpm)).toFixed(2)} s`;
+  $<HTMLButtonElement>('undo').disabled = !history.canUndo;
+  $<HTMLButtonElement>('redo').disabled = !history.canRedo;
+  // Knob: 40–300 BPM over a 270° sweep.
+  const t = (p.bpm - BPM_MIN) / (BPM_MAX - BPM_MIN);
+  const ang = -135 + 270 * t;
+  $('knob-tick').setAttribute('transform', `rotate(${ang} 24 24)`);
+  $('knob-arc').setAttribute('d', arc(24, 24, 19, -135, ang));
+}
+
+function arc(cx: number, cy: number, r: number, a0: number, a1: number) {
+  const pt = (a: number) => [cx + r * Math.sin((a * Math.PI) / 180), cy - r * Math.cos((a * Math.PI) / 180)];
+  const [x0, y0] = pt(a0), [x1, y1] = pt(a1);
+  return `M ${x0} ${y0} A ${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1} ${y1}`;
+}
+
+function togglePlay() {
+  if (!engine.loaded) return;
+  if (scheduler.playing) {
+    scheduler.stop();
+    view.playheadId = null;
+  } else scheduler.start();
+  const b = $<HTMLButtonElement>('play');
+  b.textContent = scheduler.playing ? 'Stop' : 'Play';
+  b.classList.toggle('playing', scheduler.playing);
+}
+
+function setTool(tool: 'draw' | 'select') {
+  view.tool = tool;
+  $('tool-draw').classList.toggle('on', tool === 'draw');
+  $('tool-select').classList.toggle('on', tool === 'select');
+  if (tool === 'draw') clearSelection();
+}
+
+function clearSelection() {
+  view.rect = null;
+  view.groupSel = null;
+  view.drop = null;
+  showActions();
+}
+
+/** Structure edits move indices around, so selections are dropped after them. */
+function applyStructure(next: Pattern) {
+  history.apply(next);
+  clearSelection();
+}
+
+// Buttons clicked with the mouse give focus back, so Space always means Play/Stop.
+document.addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest('button');
+  if (b && e.detail > 0) b.blur();
+});
+
+$('play').onclick = togglePlay;
+$('random').onclick = () => {
+  engine.resume();
+  history.apply(randomFill(pattern(), view.rect));
+};
+$('undo').onclick = () => { history.undo(); clearSelection(); };
+$('redo').onclick = () => { history.redo(); clearSelection(); };
+$('tool-draw').onclick = () => setTool('draw');
+$('tool-select').onclick = () => setTool('select');
+$('new').onclick = () => {
+  const f = fresh();
+  f.bpm = pattern().bpm;
+  applyStructure(f);
+};
+
+// Tempo knob: drag up/down (Shift for fine), scroll, or double-click to type. One drag = one undo step.
+{
+  const knob = $('knob');
+  let startY = 0, startBpm = 0;
+  const clampBpm = (b: number) => Math.max(BPM_MIN, Math.min(BPM_MAX, b));
+  knob.addEventListener('pointerdown', (e) => {
+    knob.setPointerCapture(e.pointerId);
+    startY = e.clientY;
+    startBpm = pattern().bpm;
+    history.begin();
+  });
+  knob.addEventListener('pointermove', (e) => {
+    if (!knob.hasPointerCapture(e.pointerId)) return;
+    const per = e.shiftKey ? 0.1 : 0.5;
+    history.apply(setBpm(pattern(), clampBpm(startBpm + (startY - e.clientY) * per)));
+  });
+  const done = () => { history.end(); updatePanel(); };
+  knob.addEventListener('pointerup', done);
+  knob.addEventListener('pointercancel', done);
+  let wheelTimer = 0;
+  knob.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    history.begin();
+    history.apply(setBpm(pattern(), clampBpm(pattern().bpm - Math.sign(e.deltaY) * (e.shiftKey ? 0.1 : 1))));
+    window.clearTimeout(wheelTimer);
+    wheelTimer = window.setTimeout(done, 400);
+  }, { passive: false });
+  const input = $<HTMLInputElement>('bpm-input');
+  const openInput = () => {
+    input.value = String(pattern().bpm);
+    input.hidden = false;
+    input.focus();
+    input.select();
+  };
+  knob.addEventListener('dblclick', openInput);
+  $('bpm').addEventListener('dblclick', openInput);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') input.blur();
+    if (e.key === 'Escape') { input.value = String(pattern().bpm); input.blur(); }
+  });
+  input.addEventListener('blur', () => {
+    const v = parseFloat(input.value);
+    if (!Number.isNaN(v)) history.apply(setBpm(pattern(), clampBpm(v)));
+    input.hidden = true;
+  });
+}
+
+// ---------------------------------------------------------------- action bar
+
+function button(label: string, onClick: () => void, opts: { disabled?: boolean; danger?: boolean } = {}) {
+  const b = document.createElement('button');
+  b.textContent = label;
+  b.disabled = !!opts.disabled;
+  if (opts.danger) b.className = 'danger';
+  b.onclick = (e) => { e.stopPropagation(); onClick(); };
+  return b;
+}
+
+function showActions() {
+  actions.replaceChildren();
+  const L = layout;
+  if (view.groupSel) {
+    const [a, b] = view.groupSel;
+    const hint = document.createElement('span');
+    hint.className = 'hint';
+    hint.textContent = 'drag to move';
+    actions.append(
+      hint,
+      ...(b > a ? [button('Merge', doMergeGroups)] : []),
+      button('Duplicate', doDuplicate),
+      button('Delete', doDeleteGroups, { danger: true }),
+    );
+    const x = (L.xs[L.runs[a].start] + L.xs[L.runs[b].end - 1]) / 2;
+    place(x, L.bandTop + L.bandH + 10);
+  } else if (view.rect) {
+    const r = view.rect;
+    actions.append(
+      button('Clear', doClearRect, { danger: true }),
+      button('Copy', doCopy),
+      button('Paste', doPaste, { disabled: !clip }),
+      button('Random', () => history.apply(randomFill(pattern(), view.rect))),
+    );
+    const x = (L.xs[r.t0] + L.xs[r.t1]) / 2;
+    const below = L.top + (r.r1 + 1) * L.rowH + 6;
+    place(x, r.r1 > ROWS.length - 5 ? L.top + r.r0 * L.rowH - 46 : below);
+  }
+  actions.hidden = !actions.childElementCount;
+}
+
+function place(x: number, y: number) {
+  actions.hidden = false;
+  const w = actions.offsetWidth;
+  actions.style.left = `${Math.max(8, Math.min(layout.width - w - 8, x - w / 2))}px`;
+  actions.style.top = `${Math.max(4, y)}px`;
+}
+
+function doMergeGroups() {
+  if (!view.groupSel) return;
+  const [a, b] = view.groupSel;
+  history.apply(mergeGroups(pattern(), a, b));
+  view.groupSel = [a, a];
+  showActions();
+}
+function doDuplicate() {
+  if (!view.groupSel) return;
+  const [a, b] = view.groupSel;
+  history.apply(duplicateGroups(pattern(), a, b));
+  showActions();
+}
+function doDeleteGroups() {
+  if (!view.groupSel) return;
+  applyStructure(deleteGroups(pattern(), ...view.groupSel));
+}
+function doClearRect() {
+  if (view.rect) history.apply(clearRect(pattern(), view.rect));
+}
+function doCopy() {
+  if (view.rect) clip = copyRect(pattern(), view.rect);
+  showActions();
+}
+function doPaste() {
+  if (view.rect && clip) history.apply(pasteClip(pattern(), clip, view.rect.t0, view.rect.r0));
+}
+
+// ---------------------------------------------------------------- pointer gestures
+
+type Gesture =
+  | { kind: 'draw'; mode: 'fill' | 'erase'; x0: number; y0: number; last: string; timer: number; ti: number; ri: number; before: number | null }
+  | { kind: 'pluck'; ti: number; ri: number; x0: number; v0: number }
+  | { kind: 'rect'; ti: number; ri: number }
+  | { kind: 'band-select'; anchor: number }
+  | { kind: 'band-move'; a: number; b: number; x0: number; moved: boolean; run: number }
+  | { kind: 'strip'; target: Target };
+
+let gesture: Gesture | null = null;
+let lastPreview = 0;
+
+function point(e: PointerEvent) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+function preview(row: RowTag, v: number) {
+  const now = performance.now();
+  if (now - lastPreview < 35) return; // a fast swipe shouldn't machine-gun
+  lastPreview = now;
+  engine.resume();
+  engine.play(row, v, undefined, true);
+}
+
+function paint(ti: number, ri: number, mode: 'fill' | 'erase') {
+  const row = ROWS[ri];
+  const has = !!getHit(pattern(), ti, row);
+  if (mode === 'fill' && !has) {
+    history.apply(setHit(pattern(), ti, row, { v: DEFAULT_VELOCITY }));
+    preview(row, DEFAULT_VELOCITY);
+  } else if (mode === 'erase' && has) {
+    history.apply(setHit(pattern(), ti, row, null));
+  }
+}
+
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  engine.resume();
+  const { x, y } = point(e);
+  const t = hitTest(layout, pattern(), x, y);
+  canvas.setPointerCapture(e.pointerId);
+
+  if (t.kind === 'cell') {
+    if (selecting()) {
+      view.groupSel = null;
+      gesture = { kind: 'rect', ti: t.ti, ri: t.ri };
+      view.rect = { t0: t.ti, t1: t.ti, r0: t.ri, r1: t.ri };
+      showActions();
+      return;
+    }
+    clearSelection();
+    history.begin();
+    const row = ROWS[t.ri];
+    const before = getHit(pattern(), t.ti, row)?.v ?? null;
+    const mode = before === null ? 'fill' : 'erase';
+    paint(t.ti, t.ri, mode);
+    gesture = {
+      kind: 'draw', mode, x0: x, y0: y, last: `${t.ti}:${t.ri}`, ti: t.ti, ri: t.ri, before,
+      timer: window.setTimeout(() => startPluck(), HOLD_MS),
+    };
+    return;
+  }
+
+  if (t.kind === 'band') {
+    if (!selecting()) {
+      // Draw tool: paint the group a nearby colour (one undo step per click).
+      applyStructure(recolour(pattern(), t.run));
+      return;
+    }
+    view.rect = null;
+    const sel = view.groupSel;
+    if (sel && t.run >= sel[0] && t.run <= sel[1] && !e.shiftKey) {
+      gesture = { kind: 'band-move', a: sel[0], b: sel[1], x0: x, moved: false, run: t.run };
+    } else if (sel && e.shiftKey) {
+      view.groupSel = [Math.min(sel[0], t.run), Math.max(sel[1], t.run)];
+      gesture = { kind: 'band-select', anchor: sel[0] <= t.run ? sel[0] : sel[1] };
+    } else {
+      view.groupSel = [t.run, t.run];
+      gesture = { kind: 'band-select', anchor: t.run };
+    }
+    showActions();
+    return;
+  }
+
+  if (t.kind !== 'none') gesture = { kind: 'strip', target: t };
+  else clearSelection();
+});
+
+function startPluck() {
+  if (!gesture || gesture.kind !== 'draw') return;
+  const { ti, ri, before, x0 } = gesture;
+  const row = ROWS[ri];
+  // Past the threshold the cell is guaranteed to hold a hit, whatever the first press did.
+  const v0 = before ?? DEFAULT_VELOCITY;
+  history.apply(setHit(pattern(), ti, row, { v: v0 }));
+  gesture = { kind: 'pluck', ti, ri, x0, v0 };
+  view.hold = { threadId: pattern().threads[ti].id, ri, dx: 0 };
+}
+
+canvas.addEventListener('pointermove', (e) => {
+  const { x, y } = point(e);
+  const t = hitTest(layout, pattern(), x, y);
+  if (!gesture) {
+    view.hover = selecting() && t.kind === 'cell' ? { kind: 'none' } : t;
+    canvas.style.cursor = t.kind === 'none' ? 'default' : t.kind === 'band' && selecting() ? 'grab' : t.kind === 'band' ? 'copy' : 'pointer';
+    return;
+  }
+  const g = gesture;
+  if (g.kind === 'draw') {
+    if (Math.hypot(x - g.x0, y - g.y0) > MOVE_TOLERANCE) window.clearTimeout(g.timer);
+    if (t.kind === 'cell') {
+      const key = `${t.ti}:${t.ri}`;
+      if (key !== g.last) {
+        window.clearTimeout(g.timer);
+        g.last = key;
+        paint(t.ti, t.ri, g.mode);
+      }
+      view.hover = t;
+    }
+  } else if (g.kind === 'pluck') {
+    // Pull sideways: the further you pull, the harder the hit.
+    const dx = x - g.x0;
+    const pull = Math.max(-34, Math.min(34, dx * 0.6));
+    if (view.hold) view.hold.dx = pull;
+    if (Math.abs(dx) > 3) {
+      const v = Math.max(0.12, Math.min(1, Math.abs(dx) / 70));
+      history.apply(setHit(pattern(), g.ti, ROWS[g.ri], { v }));
+    }
+  } else if (g.kind === 'rect') {
+    if (t.kind === 'cell') {
+      view.rect = {
+        t0: Math.min(g.ti, t.ti), t1: Math.max(g.ti, t.ti), r0: Math.min(g.ri, t.ri), r1: Math.max(g.ri, t.ri),
+      };
+      showActions();
+    }
+  } else if (g.kind === 'band-select') {
+    if (t.kind === 'band') {
+      view.groupSel = [Math.min(g.anchor, t.run), Math.max(g.anchor, t.run)];
+      showActions();
+    }
+  } else if (g.kind === 'band-move') {
+    if (Math.abs(x - g.x0) > 6) g.moved = true;
+    if (g.moved) {
+      view.drop = { a: g.a, b: g.b, idx: dropIndex(layout, x, g.a, g.b) };
+      actions.hidden = true;
+      canvas.style.cursor = 'grabbing';
+    }
+  }
+});
+
+function endGesture(e: PointerEvent) {
+  const g = gesture;
+  gesture = null;
+  if (!g) return;
+  const { x, y } = point(e);
+  if (g.kind === 'draw') {
+    window.clearTimeout(g.timer);
+    history.end();
+  } else if (g.kind === 'pluck') {
+    const hit = getHit(pattern(), g.ti, ROWS[g.ri]);
+    const v = hit?.v ?? g.v0;
+    engine.play(ROWS[g.ri], v, undefined, true);
+    const id = pattern().threads[g.ti].id;
+    renderer.pluck(id, (view.hold?.dx ?? 0) * 0.6, 0.12 + 0.12 * v, 6);
+    view.hold = null;
+    history.end();
+  } else if (g.kind === 'band-move') {
+    if (g.moved && view.drop) {
+      const idx = view.drop.idx;
+      history.apply(moveGroups(pattern(), g.a, g.b, idx));
+      view.groupSel = [idx, idx + (g.b - g.a)];
+    } else if (!g.moved) {
+      view.groupSel = [g.run, g.run];
+    }
+    view.drop = null;
+    showActions();
+  } else if (g.kind === 'strip') {
+    const t = hitTest(layout, pattern(), x, y);
+    if (JSON.stringify(t) !== JSON.stringify(g.target)) return;
+    const p = pattern();
+    if (t.kind === 'add') applyStructure(insertAfter(p, t.ti));
+    else if (t.kind === 'del') applyStructure(deleteCell(p, t.ti));
+    else if (t.kind === 'front') applyStructure(insertFront(p));
+    else if (t.kind === 'split') applyStructure(split(p, t.g));
+    else if (t.kind === 'merge') applyStructure(merge(p, t.g));
+  }
+}
+canvas.addEventListener('pointerup', endGesture);
+canvas.addEventListener('pointercancel', endGesture);
+canvas.addEventListener('pointerleave', () => { if (!gesture) view.hover = { kind: 'none' }; });
+
+// ---------------------------------------------------------------- keyboard
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Shift') shiftHeld = true;
+  if ((e.target as HTMLElement).tagName === 'INPUT') return;
+  const mod = e.metaKey || e.ctrlKey;
+  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  else if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? history.redo() : history.undo(); clearSelection(); }
+  else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); doDuplicate(); }
+  else if (mod && e.key.toLowerCase() === 'c') { doCopy(); }
+  else if (mod && e.key.toLowerCase() === 'v') { doPaste(); }
+  else if (mod) return;
+  else if (e.key === 'Delete' || e.key === 'Backspace') {
+    e.preventDefault();
+    if (view.groupSel) doDeleteGroups();
+    else doClearRect();
+  }
+  else if (e.key.toLowerCase() === 'd') setTool('draw');
+  else if (e.key.toLowerCase() === 's') setTool('select');
+  else if (e.key.toLowerCase() === 'm') doMergeGroups();
+  else if (e.key === 'Escape') clearSelection();
+});
+window.addEventListener('keyup', (e) => { if (e.key === 'Shift') shiftHeld = false; });
+window.addEventListener('blur', () => (shiftHeld = false));
+
+// ---------------------------------------------------------------- frame loop
+
+// How long a string keeps swinging, in cells: heavier beads swing a little longer (§11.2).
+// Measured in cells, so faster tempos give shorter wobbles and the grid never looks all-a-shimmer.
+const SWING_CELLS: Partial<Record<RowTag, number>> = { BD: 1.6, FT: 1.4, HT: 1.2, DB: 1.1, CG: 1.1, BG: 1.0, SD: 1.0 };
+
+function frame() {
+  const p = pattern();
+  layout = computeLayout(p, stage.clientWidth, stage.clientHeight);
+  const cell = threadSeconds(p.bpm);
+  for (const f of scheduler.due()) {
+    view.playheadId = f.threadId;
+    if (f.hits.length) {
+      const v = Math.max(...f.hits.map((h) => h.v));
+      const cells = Math.max(0.7, ...f.hits.map((h) => SWING_CELLS[h.row] ?? 0.7));
+      const tau = Math.min(0.35, (cells * cell) / 2.5); // decays to ~8% within `cells` cells
+      const freq = Math.max(3, Math.min(16, 1.2 / (cells * cell))); // about one swing per wobble
+      renderer.pluck(f.threadId, 0.8 + 2.2 * v, tau, freq);
+    }
+  }
+  renderer.draw(p, layout, view);
+  requestAnimationFrame(frame);
+}
+
+updatePanel();
+requestAnimationFrame(frame);
+
+// Development-only handle for automated checks; not present in production builds.
+if (import.meta.env.DEV) Object.assign(window, { __rg: { engine, scheduler, history } });
