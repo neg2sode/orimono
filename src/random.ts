@@ -37,7 +37,7 @@ export const STYLES: Style[] = [
     fills: true,
     crash: 0.4,
     setup: ({ pick, prefer }) => {
-      const back = pick(prefer(['SD', 'SD', 'XS', 'CP']));
+      const back = pick(prefer(['SD', 'SD', 'SD', 'CP']));
       const steady = pick(prefer(['CH', 'CH', 'RD', 'SH']));
       const sparsePool = prefer(['HT', 'FT', 'BG', 'CG', 'DB', 'CB', 'CL', 'TB']);
       const sparse = [...new Set<RowTag>([pick(sparsePool), pick(sparsePool)])];
@@ -63,7 +63,7 @@ export const STYLES: Style[] = [
     fills: false,
     crash: 0.5,
     setup: ({ pick, prefer }) => {
-      const back = pick(prefer(['CP', 'SD', 'XS']));
+      const back = pick(prefer(['CP', 'SD']));
       const wash = pick(prefer(['RD', 'OH', 'SH']));
       return ({ len, gi }, { chance }) => {
         const out: Note[] = [];
@@ -147,7 +147,7 @@ export const STYLES: Style[] = [
         // Ride on every cell; the strongest one leans into the next group.
         out.push([pos, 'RD', last && len >= 2 ? 0.8 : start ? 0.6 : 0.42]);
         if (pos === mid(len) && len >= 2 && chance(0.85)) out.push([pos, 'PH', 0.6]);
-        if (!start && chance(0.18)) out.push([pos, 'XS', 0.6]);
+        if (!start && chance(0.15)) out.push([pos, 'SD', 0.4]);
         if (start && chance(0.7)) out.push([pos, 'BD', 0.38]);
       }
       return out;
@@ -211,7 +211,9 @@ function compose(p: Pattern, style: Style, t: Tools, rng: Rng): Map<string, numb
   const group = style.setup(t);
   const rs = runs(p);
   const notes = new Map<string, number>();
-  const vary = (v: number) => Math.max(0.1, Math.min(1, v + (rng() - 0.5) * 0.16));
+  // Strengths are kept fairly even (dynamics are for plucking): each style's value is pulled
+  // 40% of the way towards 0.72, plus a small wobble.
+  const vary = (v: number) => Math.max(0.1, Math.min(1, 0.72 + (v - 0.72) * 0.6 + (rng() - 0.5) * 0.08));
 
   // Sometimes groups of the same length rhyme: they share one figure, and the last of them
   // changes its second half. Otherwise every group is rolled on its own.

@@ -33,7 +33,7 @@ describe('Random (scenario 6)', () => {
 
   it('with a selection, only touches the selection', () => {
     const p = fresh();
-    const q = randomFill(p, { t0: 4, t1: 7, r0: 17, r1: 17 }, seeded(3));
+    const q = randomFill(p, { t0: 4, t1: 7, r0: 16, r1: 16 }, seeded(3));
     q.threads.forEach((t, i) => {
       const keys = Object.keys(t.lanes);
       if (i < 4 || i > 7) expect(keys).toEqual([]);
@@ -60,7 +60,7 @@ describe('Random (scenario 6)', () => {
 
   it('with a selection, fills around your notes', () => {
     const p = setHit(fresh(), 1, 'BD', { v: 0.3, mine: true });
-    const q = randomFill(p, { t0: 0, t1: 15, r0: 17, r1: 17 }, seeded(2), [0]);
+    const q = randomFill(p, { t0: 0, t1: 15, r0: 16, r1: 16 }, seeded(2), [0]);
     expect(getHit(q, 1, 'BD')).toEqual({ v: 0.3, mine: true });
     expect(getHit(q, 0, 'BD')?.mine).toBeUndefined();
     expect(q.threads.filter((_, ti) => getHit(q, ti, 'BD')).length).toBeGreaterThan(1);

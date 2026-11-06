@@ -58,7 +58,7 @@ some shortened; see `tools/drums.py`):
   [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/)
   (both from the [SFZ Instruments](https://sfzinstruments.github.io/drums) conversions)
 - Ride: [Big Rusty Drums](https://sfzinstruments.github.io/drums/big_rusty_drums) by Karoryfer Samples — CC0
-- Snare, cross-stick: [Virtuosity Drums](https://github.com/sfzinstruments/virtuosity_drums)
+- Snare: [Virtuosity Drums](https://github.com/sfzinstruments/virtuosity_drums)
   by Versilian Studios and Karoryfer Samples — CC0
 
 Percussion, all CC0: [VCSL](https://github.com/sgossner/VCSL) by Versilian Studios, and

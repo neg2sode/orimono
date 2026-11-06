@@ -109,8 +109,6 @@ def recipes():
                [-0.1, 0.0, 0.4, 3.6, -1.9, -11.2, -1.6, -0.6, 6], None),
         "SD": (virtuosity("snare_center", "snaremic"),
                [3.5, 2.3, 0.0, -3.3, 0.9, 1.4, 1.3, -0.1, 6], None),
-        "XS": (virtuosity("snare_crossstick", "snaremic"),
-               [6, 5.9, 0.3, -4.6, -7.2, -2.1, 2.6, -6.5, 3.1], 215),
         "HT": (drumgizmo(MUL, "Tom1", [("Tom1", 0)], -14),
                [-2.0, -1.3, 0.0, -3.2, -4.1, 0.8, 5.5, -1.5, -8.0], 1291),
         "FT": (drumgizmo(DRS, "Tom3", [("Tom3", 0)], -14),

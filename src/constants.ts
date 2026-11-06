@@ -35,7 +35,7 @@ export const UI = {
 
 /** Rows top to bottom (§4.2). Must match public/kit/manifest.json. */
 export const ROWS = [
-  'CR', 'RD', 'OH', 'CH', 'PH', 'SH', 'TB', 'CB', 'CL', 'XS', 'CP', 'BG', 'CG', 'DB', 'HT', 'FT', 'SD', 'BD',
+  'CR', 'RD', 'OH', 'CH', 'PH', 'SH', 'TB', 'CB', 'CL', 'CP', 'BG', 'CG', 'DB', 'HT', 'FT', 'SD', 'BD',
 ] as const;
 export type RowTag = (typeof ROWS)[number];
 

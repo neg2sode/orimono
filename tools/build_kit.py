@@ -34,26 +34,25 @@ SR = 48000  # for measuring only: files keep the rate they were recorded at (44.
 # tag, name, folder, filename regex, stereo, loudness target (dB, see below), floor ms, max length s, chokes
 # ("takes" in the last list means: every file is a take of one single strength.)
 # Loudness target: the loudest strength's average level over its first 100 ms is set to this.
-# These are starting points for the mix, to be tuned by ear.
+# Tuned by ear with the row faders (6 Nov 2026).
 ROWS = [
-    ("CR", "Crash", DRUMS, "", True, -21, 50, 3.0, []),
-    ("RD", "Ride", DRUMS, "", True, -23, 50, 2.5, []),
-    ("OH", "Open hat", DRUMS, "", True, -22, 50, 1.6, []),
-    ("CH", "Closed hat", DRUMS, "", True, -22, 40, 0.6, ["OH"]),
-    ("PH", "Pedal hat", DRUMS, "", True, -25, 40, 0.5, ["OH"]),
-    ("SH", "Egg shaker", f"{FP}/EggShaker", r"^soft_", False, -24, 40, 0.4, ["takes"]),
-    ("TB", "Tambourine", f"{VCSL}/Tambourine 1", r"^Tamb1_Shake", True, -24, 40, 0.8, []),
-    ("CB", "Cowbell", f"{VCSL}/Cowbells", r"^Cowbell2_Normal", False, -22, 50, 0.8, []),
-    ("CL", "Claves", f"{VCSL}/Claves", r"^Claves1_Hit", False, -22, 40, 0.6, []),
-    ("XS", "Cross-stick", DRUMS, "", True, -20, 40, 0.5, []),
+    ("CR", "Crash", DRUMS, "", True, -17.8, 50, 3.0, []),
+    ("RD", "Ride", DRUMS, "", True, -22.7, 50, 2.5, []),
+    ("OH", "Open hat", DRUMS, "", True, -21, 50, 1.6, []),
+    ("CH", "Closed hat", DRUMS, "", True, -22.5, 40, 0.6, ["OH"]),
+    ("PH", "Pedal hat", DRUMS, "", True, -24.8, 40, 0.5, ["OH"]),
+    ("SH", "Egg shaker", f"{FP}/EggShaker", r"^soft_", False, -23.3, 40, 0.4, ["takes"]),
+    ("TB", "Tambourine", f"{VCSL}/Tambourine 1", r"^Tamb1_Shake", True, -23.1, 40, 0.8, []),
+    ("CB", "Cowbell", f"{VCSL}/Cowbells", r"^Cowbell2_Normal", False, -19.5, 50, 0.8, []),
+    ("CL", "Claves", f"{VCSL}/Claves", r"^Claves1_Hit", False, -23.9, 40, 0.6, []),
     ("CP", "Claps", f"{VCSL}/Claps", r"^Clap_rr", True, -19, 60, 0.6, []),
     ("BG", "Bongo", f"{VCSL}/Bongos", r"^BongoL_Hit1_", False, -18, 50, 0.7, []),
-    ("CG", "Quinto", f"{VCSL}/Conga", r"^Quinto_HitN_", False, -18, 50, 0.8, []),
-    ("DB", "Darbuka", f"{VCSL}/Darbuka", r"^Darbuka_4_hit", False, -18, 50, 0.7, []),
-    ("HT", "High tom", DRUMS, "", False, -17, 50, 1.4, []),
-    ("FT", "Floor tom", DRUMS, "", False, -16, 50, 1.6, []),
-    ("SD", "Snare", DRUMS, "", True, -15, 50, 0.8, []),
-    ("BD", "Kick", DRUMS, "", False, -13, 60, 0.9, []),
+    ("CG", "Quinto", f"{VCSL}/Conga", r"^Quinto_HitN_", False, -12.5, 50, 0.8, []),
+    ("DB", "Darbuka", f"{VCSL}/Darbuka", r"^Darbuka_4_hit", False, -16.9, 50, 0.7, []),
+    ("HT", "High tom", DRUMS, "", False, -15, 50, 1.4, []),
+    ("FT", "Floor tom", DRUMS, "", False, -15.5, 50, 1.6, []),
+    ("SD", "Snare", DRUMS, "", True, -11.7, 50, 0.8, []),
+    ("BD", "Kick", DRUMS, "", False, -8.4, 60, 0.9, []),
 ]
 
 

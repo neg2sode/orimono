@@ -398,6 +398,8 @@ export function parse(json: unknown): Pattern | null {
     return null;
   }
   if (!p.threads.every((t) => p.groups[t.group] && typeof t.id === 'number' && t.lanes)) return null;
+  // Rows that left the kit (the cross-stick, Nov 2026) are dropped from old saves.
+  for (const t of p.threads) for (const k of Object.keys(t.lanes)) if (!(ROWS as readonly string[]).includes(k)) delete t.lanes[k as RowTag];
   return p;
 }
 

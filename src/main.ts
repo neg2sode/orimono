@@ -48,7 +48,7 @@ const pattern = () => history.current;
 const engine = new Engine();
 
 // Row faders: one level per row, for every pattern (kept in this browser, not in undo).
-const MIX_KEY = 'orimono.mix.v1';
+const MIX_KEY = 'orimono.mix.v2'; // v1 levels were baked into the kit (Nov 2026)
 let mix: Partial<Record<RowTag, RowMix>> = {};
 try { mix = JSON.parse(localStorage.getItem(MIX_KEY) ?? '{}'); } catch { /* ignore */ }
 engine.setMix(mix);

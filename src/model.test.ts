@@ -144,11 +144,11 @@ describe('matrix selection', () => {
   it('copies, clears and pastes a block', () => {
     let p = setHit(fresh(), 0, 'BD', { v: 1 });
     p = setHit(p, 1, 'SD', { v: 0.5 });
-    const rect = { t0: 0, t1: 1, r0: 16, r1: 17 }; // SD, BD
+    const rect = { t0: 0, t1: 1, r0: 15, r1: 16 }; // SD, BD
     const clip = copyRect(p, rect);
     p = clearRect(p, rect);
     expect(getHit(p, 0, 'BD')).toBeNull();
-    p = pasteClip(p, clip, 4, 16);
+    p = pasteClip(p, clip, 4, 15);
     expect(getHit(p, 4, 'BD')?.v).toBe(1);
     expect(getHit(p, 5, 'SD')?.v).toBe(0.5);
   });
