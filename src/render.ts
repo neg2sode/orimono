@@ -277,11 +277,6 @@ export class Renderer {
       }
     });
 
-    if (h.kind === 'band' && s.tool === 'draw') {
-      const r = L.runs[h.run];
-      if (r) tooltip(ctx, xs[r.start] - L.colW / 2, L.bandTop + L.bandH + 14, 'click: nudge colour');
-    }
-
     // Where dragged groups would land.
     if (s.drop) {
       const rest = L.runs.filter((_, i) => i < s.drop!.a || i > s.drop!.b);
