@@ -19,6 +19,8 @@ export interface ViewState {
   rowSel: [number, number] | null;
   /** Rows silenced by mute or by another row's solo (their tags are dimmed). */
   quiet?: boolean[];
+  /** performance.now() of the last Random press: the user's own notes glow briefly. */
+  glow: number;
 }
 
 interface Wobble { amp: number; t0: number; freq: number; tau: number }
@@ -139,6 +141,8 @@ export class Renderer {
     const span = L.bottom - L.top + 16;
     const y0 = L.top - 8;
     const rMax = Math.max(3, Math.min(15, Math.min(L.colW, L.rowH) * 0.42));
+    // After a Random press, the user's own notes (which Random kept) glow and fade out.
+    const glow = Math.max(0, 1 - (nowMs - s.glow) / 900);
     p.threads.forEach((t, ti) => {
       const colour = colourOf(ti);
       const a = this.alpha.get(t.id) ?? 1;
@@ -169,8 +173,17 @@ export class Renderer {
         if (hit) {
           ctx.globalAlpha = a;
           ctx.beginPath();
-          ctx.arc(x, y, rMax * (0.42 + 0.58 * hit.v), 0, Math.PI * 2);
+          const r = rMax * (0.42 + 0.58 * hit.v);
+          ctx.arc(x, y, r, 0, Math.PI * 2);
           ctx.fill();
+          if (hit.mine && glow > 0) {
+            ctx.globalAlpha = a * glow;
+            ctx.strokeStyle = UI.text;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(x, y, r + 3 + 4 * (1 - glow), 0, Math.PI * 2);
+            ctx.stroke();
+          }
         } else {
           ctx.globalAlpha = a * 0.4;
           ctx.beginPath();

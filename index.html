@@ -20,7 +20,10 @@
         <div class="bpm"><span id="bpm">72</span><small>BPM</small></div>
         <input id="bpm-input" type="number" min="40" max="300" step="0.1" hidden />
       </div>
-      <button id="random" class="primary" title="Random: fill your groups with a pattern">Random</button>
+      <div class="random-wrap">
+        <button id="random" class="primary" title="Random: fill your groups (or the selection) with a beat. Your own notes stay. Shift-click: same style again">Random</button>
+        <span id="style-tag" aria-live="polite"></span>
+      </div>
       <div class="seg" role="group" aria-label="Tool">
         <button id="tool-draw" class="on" title="Draw (D): tap, swipe, long-press to pluck">Draw</button>
         <button id="tool-select" title="Select (S, or hold Shift): rectangle in the grid, groups in the band">Select</button>

@@ -11,7 +11,7 @@ import {
   clearRect, copyRect, deleteCell, deleteGroups, duplicateGroups, fresh, getHit, insertAfter, insertFront,
   insertBack, isBoundary, merge, mergeGroups, moveGroups, parse, pasteClip, recolour, runs, setBpm, setHit, split, type Clip, type Pattern, type Rect,
 } from './model';
-import { randomFill } from './random';
+import { STYLES, randomFillStyled } from './random';
 import { Renderer, type ViewState } from './render';
 import { Scheduler } from './scheduler';
 
@@ -61,7 +61,7 @@ const scheduler = new Scheduler(engine, pattern);
 const renderer = new Renderer(canvas);
 
 const view: ViewState = {
-  tool: 'draw', hover: { kind: 'none' }, rect: null, groupSel: null, drop: null, playheadId: null, hold: null, stripSel: null, rowSel: null,
+  tool: 'draw', hover: { kind: 'none' }, rect: null, groupSel: null, drop: null, playheadId: null, hold: null, stripSel: null, rowSel: null, glow: 0,
 };
 let lastPointer = 'mouse'; // 'touch' shows Copy / Paste buttons for a selection
 let touchColW: number | null = null; // touch number menu open: columns hold still
@@ -163,9 +163,23 @@ document.addEventListener('click', (e) => {
 });
 
 $('play').onclick = togglePlay;
-$('random').onclick = () => {
+// Random: each press picks a style, never the same one twice in a row; Shift keeps the style.
+let lastStyle = -1;
+let styleTimer = 0;
+$('random').onclick = (e) => {
   engine.resume();
-  history.apply(randomFill(pattern(), selRect()));
+  const others = STYLES.map((_, i) => i).filter((i) => i !== lastStyle).sort(() => Math.random() - 0.5);
+  const order = e.shiftKey && lastStyle >= 0 ? [lastStyle, ...others] : [...others, ...(lastStyle >= 0 ? [lastStyle] : [])];
+  const { pattern: next, style } = randomFillStyled(pattern(), selRect(), Math.random, order);
+  history.apply(next);
+  if (style < 0) return;
+  lastStyle = style;
+  const tag = $('style-tag');
+  tag.textContent = STYLES[style].name;
+  tag.classList.add('show');
+  window.clearTimeout(styleTimer);
+  styleTimer = window.setTimeout(() => tag.classList.remove('show'), 2200);
+  view.glow = performance.now(); // your own notes glow briefly: Random kept them
 };
 $('clear').onclick = doClearRect;
 $('undo').onclick = () => { history.undo(); clearSelection(); };
@@ -444,7 +458,7 @@ function paint(ti: number, ri: number, mode: 'fill' | 'erase') {
   const row = ROWS[ri];
   const has = !!getHit(pattern(), ti, row);
   if (mode === 'fill' && !has) {
-    history.apply(setHit(pattern(), ti, row, { v: DEFAULT_VELOCITY }));
+    history.apply(setHit(pattern(), ti, row, { v: DEFAULT_VELOCITY, mine: true }));
     preview(row, DEFAULT_VELOCITY);
   } else if (mode === 'erase' && has) {
     history.apply(setHit(pattern(), ti, row, null));
@@ -538,7 +552,7 @@ function startPluck() {
   const row = ROWS[ri];
   // Past the threshold the cell is guaranteed to hold a hit, whatever the first press did.
   const v0 = before ?? DEFAULT_VELOCITY;
-  history.apply(setHit(pattern(), ti, row, { v: v0 }));
+  history.apply(setHit(pattern(), ti, row, { v: v0, mine: true }));
   gesture = { kind: 'pluck', ti, ri, x0, v0 };
   view.hold = { threadId: pattern().threads[ti].id, ri, dx: 0 };
 }
@@ -573,7 +587,7 @@ canvas.addEventListener('pointermove', (e) => {
     if (view.hold) view.hold.dx = pull;
     if (Math.abs(dx) > 3) {
       const v = Math.max(0.12, Math.min(1, Math.abs(dx) / 70));
-      history.apply(setHit(pattern(), g.ti, ROWS[g.ri], { v }));
+      history.apply(setHit(pattern(), g.ti, ROWS[g.ri], { v, mine: true }));
     }
   } else if (g.kind === 'rect') {
     if (t.kind === 'cell') {

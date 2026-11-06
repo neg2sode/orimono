@@ -8,7 +8,11 @@ import { colourDistance } from './colour';
 export interface Hit {
   /** How hard it's played, 0–1. */
   v: number;
+  /** Placed by the user (drawn or plucked). Random leaves these alone. Absent = placed by Random. */
+  mine?: true;
 }
+
+const keepHit = (h: Hit): Hit => (h.mine ? { v: clamp01(h.v), mine: true } : { v: clamp01(h.v) });
 
 /**
  * One instrument on one thread. `zoom` is the number of fibres (1 = not zoomed),
@@ -161,7 +165,7 @@ export function setHit(p: Pattern, ti: number, row: RowTag, hit: Hit | null, slo
   if (!p.threads[ti]) return p;
   const q = clone(p);
   const t = q.threads[ti];
-  laneFor(t, row).slots[slot] = hit ? { v: clamp01(hit.v) } : null;
+  laneFor(t, row).slots[slot] = hit ? keepHit(hit) : null;
   pruneLane(t, row);
   return q;
 }
@@ -171,7 +175,7 @@ export function setHits(p: Pattern, cells: { ti: number; row: RowTag; hit: Hit |
   for (const c of cells) {
     const t = q.threads[c.ti];
     if (!t) continue;
-    laneFor(t, c.row).slots[0] = c.hit ? { v: clamp01(c.hit.v) } : null;
+    laneFor(t, c.row).slots[0] = c.hit ? keepHit(c.hit) : null;
     pruneLane(t, c.row);
   }
   return q;
