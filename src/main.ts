@@ -61,7 +61,7 @@ const scheduler = new Scheduler(engine, pattern);
 const renderer = new Renderer(canvas);
 
 const view: ViewState = {
-  tool: 'draw', hover: { kind: 'none' }, rect: null, groupSel: null, drop: null, playheadId: null, hold: null, stripSel: null, rowSel: null, glow: 0,
+  tool: 'draw', hover: { kind: 'none' }, rect: null, groupSel: null, drop: null, playheadId: null, hold: null, stripSel: null, rowSel: null, glow: 0, glowRect: null,
 };
 let lastPointer = 'mouse'; // 'touch' shows Copy / Paste buttons for a selection
 let touchColW: number | null = null; // touch number menu open: columns hold still
@@ -180,6 +180,7 @@ $('random').onclick = (e) => {
   window.clearTimeout(styleTimer);
   styleTimer = window.setTimeout(() => tag.classList.remove('show'), 2200);
   view.glow = performance.now(); // your own notes glow briefly: Random kept them
+  view.glowRect = selRect();
 };
 $('clear').onclick = doClearRect;
 $('undo').onclick = () => { history.undo(); clearSelection(); };
@@ -296,9 +297,9 @@ function mixLine(tag: RowTag) {
   name.textContent = tag;
   const fader = document.createElement('input');
   fader.type = 'range';
-  fader.min = '-24'; fader.max = '12'; fader.step = '0.5';
+  fader.min = '-24'; fader.max = '12'; fader.step = '0.1';
   fader.value = String(m.db);
-  fader.title = 'Level (double-click for 0 dB)';
+  fader.title = 'Level: drag, or arrow keys for 0.1 dB steps (double-click for 0 dB)';
   const val = document.createElement('span');
   val.className = 'mix-db';
   const show = (db: number) => (val.textContent = `${db > 0 ? '+' : ''}${db.toFixed(1)} dB`);

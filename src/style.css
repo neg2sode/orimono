@@ -110,13 +110,13 @@ button:focus:not(:focus-visible) { outline: none; }
   width: 30px; text-align: center; font-size: 10px; font-weight: 600; color: var(--bg);
   background: var(--honey); border-radius: 3px; padding: 1px 0;
 }
-.mix-line input[type=range] { width: 180px; accent-color: var(--caramel); }
+.mix-line input[type=range] { width: 300px; accent-color: var(--caramel); }
 .mix-db { width: 58px; font-size: 12px; color: var(--secondary); text-align: right; }
 #actions .mix-toggle { padding: 2px 7px; font-size: 11px; }
 #actions .mix-toggle.on { background: var(--text); color: var(--bg); border-color: var(--text); }
 .mix-foot { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; }
 @media (pointer: coarse) {
-  .mix-line input[type=range] { width: 220px; height: 32px; }
+  .mix-line input[type=range] { width: min(300px, 50vw); height: 32px; }
   #actions .mix-toggle { min-height: 36px; min-width: 36px; padding: 4px 8px; }
 }
 

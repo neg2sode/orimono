@@ -21,6 +21,8 @@ export interface ViewState {
   quiet?: boolean[];
   /** performance.now() of the last Random press: the user's own notes glow briefly. */
   glow: number;
+  /** The area Random filled on that press (null = everything): only notes inside it glow. */
+  glowRect: Rect | null;
 }
 
 interface Wobble { amp: number; t0: number; freq: number; tau: number }
@@ -176,7 +178,9 @@ export class Renderer {
           const r = rMax * (0.42 + 0.58 * hit.v);
           ctx.arc(x, y, r, 0, Math.PI * 2);
           ctx.fill();
-          if (hit.mine && glow > 0) {
+          const gr = s.glowRect;
+          const inGlow = !gr || (ti >= gr.t0 && ti <= gr.t1 && ri >= gr.r0 && ri <= gr.r1);
+          if (hit.mine && glow > 0 && inGlow) {
             ctx.globalAlpha = a * glow;
             ctx.strokeStyle = UI.text;
             ctx.lineWidth = 2;
