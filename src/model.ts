@@ -2,7 +2,7 @@
 // Every edit is a pure function: it returns a new pattern and never changes the old one,
 // so undo is just keeping old patterns. (Design plan §4, §7, §9.)
 
-import { MAX_THREADS, MIN_THREADS, PALETTE, REST_BIRTHS, ROWS, SHELF_ORDER, type RowTag } from './constants';
+import { DEFAULT_BPM, MAX_THREADS, MIN_THREADS, PALETTE, REST_BIRTHS, ROWS, SHELF_ORDER, type RowTag } from './constants';
 import { colourDistance } from './colour';
 
 export interface Hit {
@@ -58,7 +58,7 @@ const clone = <T>(x: T): T => structuredClone(x);
 // ---------------------------------------------------------------- basics
 
 export function fresh(): Pattern {
-  const p: Pattern = { threads: [], groups: {}, shelf: { resting: [], reuse: 0 }, bpm: 120, nextId: 1 };
+  const p: Pattern = { threads: [], groups: {}, shelf: { resting: [], reuse: 0 }, bpm: DEFAULT_BPM, nextId: 1 };
   for (let g = 0; g < 4; g++) {
     const gid = p.nextId++;
     p.groups[gid] = { id: gid, colour: g };
@@ -242,6 +242,15 @@ export function insertFront(p: Pattern): Pattern {
   return q;
 }
 
+/** "+" on the back gap: a new 1-thread group with a new colour, at the end. */
+export function insertBack(p: Pattern): Pattern {
+  if (p.threads.length >= MAX_THREADS) return p;
+  const q = clone(p);
+  const g = newGroup(q, [neighbourColour(q, q.threads.length - 1)]);
+  q.threads.push(emptyThread(q, g));
+  return q;
+}
+
 /** "–" on a number: delete that cell. A group's last cell takes the group with it. */
 export function deleteCell(p: Pattern, ti: number): Pattern {
   if (!p.threads[ti] || p.threads.length <= MIN_THREADS) return p;
@@ -374,7 +383,7 @@ export function recolour(p: Pattern, run: number): Pattern {
 
 export function setBpm(p: Pattern, bpm: number): Pattern {
   const q = clone(p);
-  q.bpm = Math.round(bpm * 10) / 10;
+  q.bpm = Math.round(bpm * 10) / 10; // the knob gives whole BPM; typing allows one decimal
   return q;
 }
 

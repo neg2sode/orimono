@@ -13,6 +13,8 @@ export interface ViewState {
   drop: { a: number; b: number; idx: number } | null;
   playheadId: number | null;
   hold: { threadId: number; ri: number; dx: number } | null;
+  /** Touch: the number whose menu is open. */
+  stripSel: number | null;
 }
 
 interface Wobble { amp: number; t0: number; freq: number; tau: number }
@@ -129,7 +131,7 @@ export class Renderer {
     // Strings and beads.
     const span = L.bottom - L.top + 16;
     const y0 = L.top - 8;
-    const rMax = Math.max(3, Math.min(L.colW, L.rowH) * 0.42);
+    const rMax = Math.max(3, Math.min(15, Math.min(L.colW, L.rowH) * 0.42));
     p.threads.forEach((t, ti) => {
       const colour = colourOf(ti);
       const a = this.alpha.get(t.id) ?? 1;
@@ -205,44 +207,62 @@ export class Renderer {
     const { ctx } = this;
     const n = p.threads.length;
     const ny = L.numTop + L.numH / 2;
+    const xa = gapX(L, 0), xb = gapX(L, n);
     ctx.fillStyle = UI.panel;
-    roundRect(ctx, LABEL_W - 14, L.numTop - 2, xs[n - 1] + L.colW / 2 - LABEL_W + 22, L.bandTop + L.bandH + 6 - L.numTop, 8);
+    roundRect(ctx, xa - 22, L.numTop - 2, xb - xa + 44, L.bandTop + L.bandH + 6 - L.numTop, 8);
     ctx.fill();
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const h = s.hover;
+    const pillW = Math.min(30, L.colW - 6), pillH = L.numH / 2 - 4;
     for (let ti = 0; ti < n; ti++) {
       const x = xs[ti];
       const hovered = (h.kind === 'add' || h.kind === 'del') && h.ti === ti;
       if (hovered) {
-        // "+" above, "–" below: one target, one meaning.
-        const top = h.kind === 'add', bot = h.kind === 'del';
+        // "+" above, "–" below, as two separate buttons.
+        const top = h.kind === 'add';
+        ctx.fillStyle = top ? UI.text : UI.warn;
+        ctx.globalAlpha = 0.16;
+        roundRect(ctx, x - pillW / 2, top ? L.numTop + 2 : L.numTop + L.numH / 2 + 2, pillW, pillH, 5);
+        ctx.fill();
+        ctx.globalAlpha = 1;
         ctx.font = `600 14px ${FONT}`;
         ctx.fillStyle = top ? UI.text : UI.dim;
-        ctx.fillText('+', x, L.numTop + L.numH * 0.27);
-        ctx.fillStyle = bot ? UI.warn : UI.dim;
+        ctx.fillText('+', x, L.numTop + L.numH * 0.25);
+        ctx.fillStyle = top ? UI.dim : UI.warn;
         ctx.fillText('–', x, L.numTop + L.numH * 0.75);
         continue;
       }
-      if ((ti + 1) % L.labelEvery !== 0 && ti !== 0) continue;
+      const picked = s.stripSel === ti;
+      if (picked) {
+        ctx.fillStyle = UI.text;
+        roundRect(ctx, x - pillW / 2, ny - 11, pillW, 22, 6);
+        ctx.fill();
+      }
+      if ((ti + 1) % L.labelEvery !== 0 && ti !== 0 && !picked) continue;
       const groupStart = L.runs.some((r) => r.start === ti);
-      ctx.font = `${groupStart ? 600 : 400} 11px ${FONT}`;
-      ctx.fillStyle = groupStart ? UI.secondary : UI.dim;
+      ctx.font = `${groupStart || picked ? 600 : 400} 11px ${FONT}`;
+      ctx.fillStyle = picked ? UI.bg : groupStart ? UI.secondary : UI.dim;
       ctx.fillText(String(ti + 1), x, ny);
     }
 
-    // Gap targets: front "+", ✂ split, ⋈ merge.
-    if (h.kind === 'front') {
-      const x = gapX(L, 0) - 6;
-      ctx.fillStyle = UI.play;
-      roundRect(ctx, x - 9, ny - 9, 18, 18, 9);
+    // New-group "+" at both ends: always visible, brighter on hover.
+    for (const end of ['front', 'back'] as const) {
+      const hot = h.kind === end;
+      const x = end === 'front' ? xa - 10 : xb + 10;
+      ctx.fillStyle = hot ? UI.play : UI.border;
+      ctx.globalAlpha = hot ? 1 : 0.55;
+      roundRect(ctx, x - 8, ny - 8, 16, 16, 8);
       ctx.fill();
+      ctx.globalAlpha = 1;
       ctx.fillStyle = UI.bg;
-      ctx.font = `700 14px ${FONT}`;
+      ctx.font = `700 13px ${FONT}`;
       ctx.fillText('+', x, ny + 0.5);
-      tooltip(ctx, x + 14, L.numTop - 4, 'new group');
+      if (hot) tooltip(ctx, end === 'front' ? x - 8 : x + 8, L.numTop - 4, end === 'front' ? 'new group at start' : 'new group at end', end === 'front' ? 'left' : 'right');
     }
+
+    // Gap targets: ✂ split, ⋈ merge.
     if (h.kind === 'split' || h.kind === 'merge') {
       const x = gapX(L, h.g);
       ctx.strokeStyle = h.kind === 'split' ? UI.text : UI.play;
@@ -296,10 +316,10 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.roundRect(x, y, Math.max(0, w), Math.max(0, h), r);
 }
 
-function tooltip(ctx: CanvasRenderingContext2D, x: number, y: number, text: string) {
+function tooltip(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, align: CanvasTextAlign = 'left') {
   ctx.save();
   ctx.font = `500 10px ${FONT}`;
-  ctx.textAlign = 'left';
+  ctx.textAlign = align;
   ctx.textBaseline = 'bottom';
   ctx.fillStyle = UI.secondary;
   ctx.fillText(text, x, y);

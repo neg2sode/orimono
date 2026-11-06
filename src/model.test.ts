@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PALETTE } from './constants';
 import {
-  clearRect, copyRect, deleteCell, deleteGroups, duplicateGroups, fresh, getHit, insertAfter, insertFront,
+  clearRect, copyRect, deleteCell, deleteGroups, duplicateGroups, fresh, getHit, insertAfter, insertBack, insertFront, setBpm,
   isBoundary, merge, mergeGroups, moveGroups, pasteClip, recolour, runs, setHit, split, type Pattern,
 } from './model';
 import { colourDistance } from './colour';
@@ -35,6 +35,17 @@ describe('number lane (§14 scenarios 2–5)', () => {
       born.push(PALETTE[runs(p)[0].colour].name);
     }
     expect(born).toEqual(['Slate', 'Teal', 'Khaki', 'Latte']);
+  });
+
+  it('a new back group is 1 cell with a fresh colour at the end', () => {
+    const p = insertBack(fresh());
+    expect(shape(p)).toBe('4+4+4+4+1');
+    expect(new Set(runs(p).map((r) => r.colour)).size).toBe(5);
+  });
+
+  it('starts at 72 BPM and keeps one typed decimal', () => {
+    expect(fresh().bpm).toBe(72);
+    expect(setBpm(fresh(), 72.54).bpm).toBe(72.5);
   });
 
   it('never goes below one thread', () => {

@@ -6,10 +6,10 @@ import './style.css';
 import { BPM_MAX, BPM_MIN, DEFAULT_VELOCITY, ROWS, threadSeconds, type RowTag } from './constants';
 import { Engine } from './audio';
 import { History } from './history';
-import { computeLayout, dropIndex, hitTest, type Layout, type Target } from './layout';
+import { computeLayout, dropIndex, hitTest, inNumberLane, touchStripTarget, type Layout, type Target } from './layout';
 import {
   clearRect, copyRect, deleteCell, deleteGroups, duplicateGroups, fresh, getHit, insertAfter, insertFront,
-  merge, mergeGroups, moveGroups, parse, pasteClip, recolour, setBpm, setHit, split, type Clip, type Pattern,
+  insertBack, isBoundary, merge, mergeGroups, moveGroups, parse, pasteClip, recolour, setBpm, setHit, split, type Clip, type Pattern,
 } from './model';
 import { randomFill } from './random';
 import { Renderer, type ViewState } from './render';
@@ -50,7 +50,7 @@ const scheduler = new Scheduler(engine, pattern);
 const renderer = new Renderer(canvas);
 
 const view: ViewState = {
-  tool: 'draw', hover: { kind: 'none' }, rect: null, groupSel: null, drop: null, playheadId: null, hold: null,
+  tool: 'draw', hover: { kind: 'none' }, rect: null, groupSel: null, drop: null, playheadId: null, hold: null, stripSel: null,
 };
 let clip: Clip | null = null;
 let layout: Layout = computeLayout(pattern(), stage.clientWidth, stage.clientHeight);
@@ -80,8 +80,8 @@ function updatePanel() {
   $('secs').textContent = `${(p.threads.length * threadSeconds(p.bpm)).toFixed(2)} s`;
   $<HTMLButtonElement>('undo').disabled = !history.canUndo;
   $<HTMLButtonElement>('redo').disabled = !history.canRedo;
-  // Knob: 40–300 BPM over a 270° sweep.
-  const t = (p.bpm - BPM_MIN) / (BPM_MAX - BPM_MIN);
+  // Knob: 40–300 BPM over a 270° sweep, on a log scale (72 sits a little before ten o'clock).
+  const t = Math.log(p.bpm / BPM_MIN) / Math.log(BPM_MAX / BPM_MIN);
   const ang = -135 + 270 * t;
   $('knob-tick').setAttribute('transform', `rotate(${ang} 24 24)`);
   $('knob-arc').setAttribute('d', arc(24, 24, 19, -135, ang));
@@ -112,6 +112,7 @@ function setTool(tool: 'draw' | 'select') {
 }
 
 function clearSelection() {
+  view.stripSel = null;
   view.rect = null;
   view.groupSel = null;
   view.drop = null;
@@ -147,33 +148,53 @@ $('new').onclick = () => {
   applyStructure(f);
 };
 
-// Tempo knob: drag up/down (Shift for fine), scroll, or double-click to type. One drag = one undo step.
+// Tempo knob: drag up/down (Shift for finer), scroll, arrow keys, or double-click to type.
+// The knob works on a log scale, so slow tempos get fine control (about 3 px per BPM near 72,
+// 1 px per BPM near 200), and it always lands on whole BPM. Typing allows one decimal.
+// One drag = one undo step.
 {
   const knob = $('knob');
-  let startY = 0, startBpm = 0;
+  const LOG_PER_PX = 0.0045; // change in ln(BPM) per pixel dragged
   const clampBpm = (b: number) => Math.max(BPM_MIN, Math.min(BPM_MAX, b));
+  const toBpm = (u: number) => clampBpm(Math.round(Math.exp(u)));
+  let startY = 0, startU = 0;
   knob.addEventListener('pointerdown', (e) => {
     knob.setPointerCapture(e.pointerId);
     startY = e.clientY;
-    startBpm = pattern().bpm;
+    startU = Math.log(pattern().bpm);
     history.begin();
   });
   knob.addEventListener('pointermove', (e) => {
     if (!knob.hasPointerCapture(e.pointerId)) return;
-    const per = e.shiftKey ? 0.1 : 0.5;
-    history.apply(setBpm(pattern(), clampBpm(startBpm + (startY - e.clientY) * per)));
+    const next = toBpm(startU + (startY - e.clientY) * LOG_PER_PX * (e.shiftKey ? 0.25 : 1));
+    if (next !== pattern().bpm) history.apply(setBpm(pattern(), next));
   });
   const done = () => { history.end(); updatePanel(); };
   knob.addEventListener('pointerup', done);
   knob.addEventListener('pointercancel', done);
-  let wheelTimer = 0;
+  // Scroll: a mouse wheel notch is one BPM; a trackpad's many small scroll events add up smoothly.
+  let wheelTimer = 0, wheelU = 0, wheeling = false;
   knob.addEventListener('wheel', (e) => {
     e.preventDefault();
-    history.begin();
-    history.apply(setBpm(pattern(), clampBpm(pattern().bpm - Math.sign(e.deltaY) * (e.shiftKey ? 0.1 : 1))));
+    if (!wheeling) { history.begin(); wheeling = true; wheelU = Math.log(pattern().bpm); }
+    const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+    const notch = Math.abs(px) >= 50; // a mouse wheel click
+    const cur = pattern().bpm;
+    if (notch) wheelU = Math.log(Math.round(cur) - Math.sign(px));
+    else wheelU -= px * LOG_PER_PX * 0.5;
+    const next = toBpm(wheelU);
+    if (next !== cur) history.apply(setBpm(pattern(), next));
     window.clearTimeout(wheelTimer);
-    wheelTimer = window.setTimeout(done, 400);
+    wheelTimer = window.setTimeout(() => { wheeling = false; done(); }, 400);
   }, { passive: false });
+  knob.addEventListener('keydown', (e) => {
+    const step = e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowDown' || e.key === 'ArrowLeft' ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const b = pattern().bpm;
+    history.apply(setBpm(pattern(), clampBpm(step > 0 ? Math.floor(b) + 1 : Math.ceil(b) - 1)));
+  });
   const input = $<HTMLInputElement>('bpm-input');
   const openInput = () => {
     input.value = String(pattern().bpm);
@@ -221,6 +242,20 @@ function showActions() {
     );
     const x = (L.xs[L.runs[a].start] + L.xs[L.runs[b].end - 1]) / 2;
     place(x, L.bandTop + L.bandH + 10);
+  } else if (view.stripSel !== null) {
+    // Touch: one number's actions as big buttons, instead of the fine targets made for a pointer.
+    const ti = view.stripSel, p = pattern(), n = p.threads.length;
+    const keep = (next: Pattern, sel: number | null) => { applyStructure(next); view.stripSel = sel; showActions(); };
+    actions.append(
+      button('+ cell', () => keep(insertAfter(p, ti), ti)),
+      button('– cell', () => keep(deleteCell(p, ti), n > 1 ? Math.min(ti, n - 2) : null), { danger: true, disabled: n <= 1 }),
+      ...(ti < n - 1
+        ? [isBoundary(p, ti + 1)
+          ? button('⋈ merge with next', () => keep(merge(p, ti + 1), ti))
+          : button(`✂ split after ${ti + 1}`, () => keep(split(p, ti + 1), ti))]
+        : []),
+    );
+    place(L.xs[ti], L.numTop - 60);
   } else if (view.rect) {
     const r = view.rect;
     actions.append(
@@ -279,7 +314,7 @@ type Gesture =
   | { kind: 'rect'; ti: number; ri: number }
   | { kind: 'band-select'; anchor: number }
   | { kind: 'band-move'; a: number; b: number; x0: number; moved: boolean; run: number }
-  | { kind: 'strip'; target: Target };
+  | { kind: 'strip'; target: Target | { kind: 'num'; ti: number } };
 
 let gesture: Gesture | null = null;
 let lastPreview = 0;
@@ -356,6 +391,17 @@ canvas.addEventListener('pointerdown', (e) => {
       gesture = { kind: 'band-select', anchor: t.run };
     }
     showActions();
+    return;
+  }
+
+  if (e.pointerType === 'touch' && inNumberLane(layout, y)) {
+    const tt = touchStripTarget(layout, x);
+    if (tt.kind === 'num') {
+      const again = view.stripSel === tt.ti;
+      clearSelection();
+      view.stripSel = again ? null : tt.ti;
+      showActions();
+    } else gesture = { kind: 'strip', target: tt };
     return;
   }
 
@@ -452,12 +498,13 @@ function endGesture(e: PointerEvent) {
     view.drop = null;
     showActions();
   } else if (g.kind === 'strip') {
-    const t = hitTest(layout, pattern(), x, y);
+    const t = e.pointerType === 'touch' && inNumberLane(layout, y) ? touchStripTarget(layout, x) : hitTest(layout, pattern(), x, y);
     if (JSON.stringify(t) !== JSON.stringify(g.target)) return;
     const p = pattern();
     if (t.kind === 'add') applyStructure(insertAfter(p, t.ti));
     else if (t.kind === 'del') applyStructure(deleteCell(p, t.ti));
     else if (t.kind === 'front') applyStructure(insertFront(p));
+    else if (t.kind === 'back') applyStructure(insertBack(p));
     else if (t.kind === 'split') applyStructure(split(p, t.g));
     else if (t.kind === 'merge') applyStructure(merge(p, t.g));
   }

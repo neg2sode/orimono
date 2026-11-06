@@ -44,6 +44,7 @@ export const MAX_THREADS = 128;
 export const DEFAULT_VELOCITY = 0.75;
 export const BPM_MIN = 40;
 export const BPM_MAX = 300;
+export const DEFAULT_BPM = 72;
 
 /** Seconds per thread (base cell): one beat = 4 threads (§4.1). */
 export const threadSeconds = (bpm: number) => 60 / (bpm * 4);

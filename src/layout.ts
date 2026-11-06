@@ -7,7 +7,7 @@ export const LABEL_W = 60;
 const PAD_R = 28;
 const TOP = 14;
 const SAME_COLOUR_GAP = 9; // extra space between side-by-side groups of the same colour (§9.1)
-const NUM_H = 34; // number lane
+const NUM_H = 44; // number lane: "+" in the top half, "–" in the bottom half
 const BAND_GAP = 4;
 const BAND_H = 12; // group band
 export const STRIP_H = NUM_H + BAND_GAP + BAND_H + 10;
@@ -36,8 +36,9 @@ export function computeLayout(p: Pattern, viewW: number, viewH: number): Layout 
   let sameGaps = 0;
   for (let i = 1; i < rs.length; i++) if (rs[i].colour === rs[i - 1].colour) sameGaps++;
   const avail = viewW - LABEL_W - PAD_R - sameGaps * SAME_COLOUR_GAP;
-  const colW = Math.max(12, Math.min(60, avail / n));
-  const rowH = Math.max(18, Math.min(30, (viewH - TOP - STRIP_H - 8) / ROWS.length));
+  // Fill the window: columns and rows stretch (within limits that keep beads in proportion).
+  const colW = Math.max(12, Math.min(140, avail / n));
+  const rowH = Math.max(18, Math.min(56, (viewH - TOP - STRIP_H - 12) / ROWS.length));
   const xs: number[] = [];
   let x = LABEL_W + colW / 2;
   rs.forEach((r, ri) => {
@@ -80,7 +81,8 @@ export type Target =
   | { kind: 'cell'; ti: number; ri: number }
   | { kind: 'add'; ti: number } // "+" on a number
   | { kind: 'del'; ti: number } // "–" on a number
-  | { kind: 'front' } // "+" on the front gap: new group
+  | { kind: 'front' } // "+" before the first number: new group at the start
+  | { kind: 'back' } // "+" after the last number: new group at the end
   | { kind: 'split'; g: number }
   | { kind: 'merge'; g: number }
   | { kind: 'band'; run: number }
@@ -96,7 +98,8 @@ export function hitTest(L: Layout, p: Pattern, x: number, y: number): Target {
   if (y >= L.numTop && y < L.numTop + L.numH) {
     // Gaps get a zone either side of the boundary; numbers get the rest.
     const zone = Math.max(4, Math.min(8, L.colW * 0.22));
-    if (Math.abs(x - gapX(L, 0)) < zone + 4 && x < L.xs[0]) return { kind: 'front' };
+    if (x < gapX(L, 0) + Math.min(zone, 4)) return x > gapX(L, 0) - 20 ? { kind: 'front' } : { kind: 'none' };
+    if (x > gapX(L, n) - Math.min(zone, 4)) return x < gapX(L, n) + 20 ? { kind: 'back' } : { kind: 'none' };
     for (let g = 1; g < n; g++) {
       if (Math.abs(x - gapX(L, g)) < zone) return isBoundary(p, g) ? { kind: 'merge', g } : { kind: 'split', g };
     }
@@ -110,6 +113,18 @@ export function hitTest(L: Layout, p: Pattern, x: number, y: number): Target {
   }
   return { kind: 'none' };
 }
+
+/** Touch: the number nearest to x (or the front/back "+"), ignoring the fine gap zones. */
+export function touchStripTarget(L: Layout, x: number): { kind: 'front' } | { kind: 'back' } | { kind: 'num'; ti: number } {
+  const n = L.xs.length;
+  if (x < gapX(L, 0)) return { kind: 'front' };
+  if (x > gapX(L, n)) return { kind: 'back' };
+  let best = 0;
+  L.xs.forEach((cx, i) => { if (Math.abs(x - cx) < Math.abs(x - L.xs[best])) best = i; });
+  return { kind: 'num', ti: best };
+}
+
+export const inNumberLane = (L: Layout, y: number) => y >= L.numTop && y < L.numTop + L.numH;
 
 /** Where a dragged run of groups would land: an index among the runs that aren't being moved. */
 export function dropIndex(L: Layout, x: number, a: number, b: number): number {
