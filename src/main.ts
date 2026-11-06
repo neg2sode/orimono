@@ -55,6 +55,9 @@ const view: ViewState = {
 let clip: Clip | null = null;
 let layout: Layout = computeLayout(pattern(), stage.clientWidth, stage.clientHeight);
 let shiftHeld = false;
+// After a "+" / "–" click, column widths hold still until the pointer moves, so the same number
+// stays under the pointer and can be clicked again and again.
+let stripAnchor: { x: number; y: number; colW: number } | null = null;
 const selecting = () => view.tool === 'select' || shiftHeld;
 
 // ---------------------------------------------------------------- loading
@@ -422,6 +425,9 @@ function startPluck() {
 
 canvas.addEventListener('pointermove', (e) => {
   const { x, y } = point(e);
+  // Up/down between + and – keeps the anchor; moving sideways or leaving the number lane lets go.
+  if (stripAnchor && (Math.abs(x - stripAnchor.x) > 4 || !inNumberLane(layout, y))) stripAnchor = null;
+  else if (stripAnchor) stripAnchor.y = y;
   const t = hitTest(layout, pattern(), x, y);
   if (!gesture) {
     view.hover = selecting() && t.kind === 'cell' ? { kind: 'none' } : t;
@@ -501,8 +507,10 @@ function endGesture(e: PointerEvent) {
     const t = e.pointerType === 'touch' && inNumberLane(layout, y) ? touchStripTarget(layout, x) : hitTest(layout, pattern(), x, y);
     if (JSON.stringify(t) !== JSON.stringify(g.target)) return;
     const p = pattern();
-    if (t.kind === 'add') applyStructure(insertAfter(p, t.ti));
-    else if (t.kind === 'del') applyStructure(deleteCell(p, t.ti));
+    if (t.kind === 'add' || t.kind === 'del') {
+      if (e.pointerType !== 'touch') stripAnchor = { x, y, colW: layout.colW };
+      applyStructure(t.kind === 'add' ? insertAfter(p, t.ti) : deleteCell(p, t.ti));
+    }
     else if (t.kind === 'front') applyStructure(insertFront(p));
     else if (t.kind === 'back') applyStructure(insertBack(p));
     else if (t.kind === 'split') applyStructure(split(p, t.g));
@@ -511,7 +519,7 @@ function endGesture(e: PointerEvent) {
 }
 canvas.addEventListener('pointerup', endGesture);
 canvas.addEventListener('pointercancel', endGesture);
-canvas.addEventListener('pointerleave', () => { if (!gesture) view.hover = { kind: 'none' }; });
+canvas.addEventListener('pointerleave', () => { stripAnchor = null; if (!gesture) view.hover = { kind: 'none' }; });
 
 // ---------------------------------------------------------------- keyboard
 
@@ -547,7 +555,8 @@ const SWING_CELLS: Partial<Record<RowTag, number>> = { BD: 1.6, FT: 1.4, HT: 1.2
 
 function frame() {
   const p = pattern();
-  layout = computeLayout(p, stage.clientWidth, stage.clientHeight);
+  layout = computeLayout(p, stage.clientWidth, stage.clientHeight, stripAnchor?.colW);
+  if (stripAnchor && !gesture) view.hover = hitTest(layout, p, stripAnchor.x, stripAnchor.y);
   const cell = threadSeconds(p.bpm);
   for (const f of scheduler.due()) {
     view.playheadId = f.threadId;

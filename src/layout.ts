@@ -30,14 +30,15 @@ export interface Layout {
   labelEvery: number;
 }
 
-export function computeLayout(p: Pattern, viewW: number, viewH: number): Layout {
+/** frozenColW: keep this column width (while + / – is clicked repeatedly in one place). */
+export function computeLayout(p: Pattern, viewW: number, viewH: number, frozenColW?: number): Layout {
   const n = p.threads.length;
   const rs = runs(p);
   let sameGaps = 0;
   for (let i = 1; i < rs.length; i++) if (rs[i].colour === rs[i - 1].colour) sameGaps++;
   const avail = viewW - LABEL_W - PAD_R - sameGaps * SAME_COLOUR_GAP;
   // Fill the window: columns and rows stretch (within limits that keep beads in proportion).
-  const colW = Math.max(12, Math.min(140, avail / n));
+  const colW = frozenColW ?? Math.max(12, Math.min(140, avail / n));
   const rowH = Math.max(18, Math.min(56, (viewH - TOP - STRIP_H - 12) / ROWS.length));
   const xs: number[] = [];
   let x = LABEL_W + colW / 2;
