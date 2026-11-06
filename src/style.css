@@ -102,3 +102,20 @@ button:focus:not(:focus-visible) { outline: none; }
   #actions { gap: 8px; padding: 8px; }
   #actions button { min-height: 44px; min-width: 44px; padding: 10px 14px; font-size: 15px; }
 }
+
+/* Row actions: faders. */
+#actions.mix { flex-direction: column; align-items: stretch; gap: 4px; padding: 8px 10px; }
+.mix-line { display: flex; align-items: center; gap: 8px; }
+.mix-tag {
+  width: 30px; text-align: center; font-size: 10px; font-weight: 600; color: var(--bg);
+  background: var(--honey); border-radius: 3px; padding: 1px 0;
+}
+.mix-line input[type=range] { width: 180px; accent-color: var(--caramel); }
+.mix-db { width: 58px; font-size: 12px; color: var(--secondary); text-align: right; }
+#actions .mix-toggle { padding: 2px 7px; font-size: 11px; }
+#actions .mix-toggle.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.mix-foot { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; }
+@media (pointer: coarse) {
+  .mix-line input[type=range] { width: 220px; height: 32px; }
+  #actions .mix-toggle { min-height: 36px; min-width: 36px; padding: 4px 8px; }
+}

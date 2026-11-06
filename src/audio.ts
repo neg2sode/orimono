@@ -14,6 +14,9 @@ interface Layer { loudDb: number; takes: Take[] }
 interface Row { def: RowDef; layers: Layer[]; lastTake: Take | null }
 interface Voice { src: AudioBufferSourceNode; gain: GainNode; base: number }
 
+/** A row's fader: level in dB (0 = the kit's own level), mute and solo. */
+export interface RowMix { db: number; mute: boolean; solo: boolean }
+
 const CHOKE_FADE = 0.004; // seconds: short enough to feel instant, long enough not to click
 
 export class Engine {
@@ -21,6 +24,8 @@ export class Engine {
   private master: GainNode;
   private rows = new Map<RowTag, Row>();
   private voices = new Map<RowTag, Voice>();
+  private buses = new Map<RowTag, GainNode>();
+  private mixState: Partial<Record<RowTag, RowMix>> = {};
 
   constructor() {
     const limiter = this.ctx.createDynamicsCompressor();
@@ -50,8 +55,12 @@ export class Engine {
           def.layers.map(async (l) => ({ loudDb: l.loudDb, takes: await Promise.all(l.takes.map(decode)) })),
         );
         this.rows.set(def.tag, { def, layers, lastTake: null });
+        const bus = this.ctx.createGain();
+        bus.connect(this.master);
+        this.buses.set(def.tag, bus);
       }),
     );
+    this.applyMix();
   }
 
   get loaded() {
@@ -105,7 +114,7 @@ export class Engine {
       src.connect(lp);
       out = lp;
     }
-    out.connect(gain).connect(this.master);
+    out.connect(gain).connect(this.buses.get(tag) ?? this.master);
 
     if (preview) {
       src.start(startAt, offset);
@@ -135,6 +144,22 @@ export class Engine {
       /* already stopped */
     }
     this.voices.delete(tag);
+  }
+
+  /** Set the faders (all rows at once); takes effect immediately, also on ringing sounds. */
+  setMix(mix: Partial<Record<RowTag, RowMix>>) {
+    this.mixState = mix;
+    this.applyMix();
+  }
+
+  private applyMix() {
+    const anySolo = Object.values(this.mixState).some((m) => m?.solo);
+    const now = this.ctx.currentTime;
+    for (const [tag, bus] of this.buses) {
+      const m = this.mixState[tag];
+      const on = !(m?.mute) && (!anySolo || !!m?.solo);
+      bus.gain.setTargetAtTime(on ? dbToGain(m?.db ?? 0) : 0, now, 0.015);
+    }
   }
 
   /** Stop everything right now (Stop button). */

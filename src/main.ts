@@ -4,9 +4,9 @@ import '@fontsource/space-grotesk/600.css';
 import './style.css';
 
 import { BPM_MAX, BPM_MIN, DEFAULT_VELOCITY, ROWS, threadSeconds, type RowTag } from './constants';
-import { Engine } from './audio';
+import { Engine, type RowMix } from './audio';
 import { History } from './history';
-import { computeLayout, dropIndex, hitTest, inNumberLane, touchStripTarget, type Layout, type Target } from './layout';
+import { LABEL_W, computeLayout, dropIndex, hitTest, inNumberLane, touchStripTarget, type Layout, type Target } from './layout';
 import {
   clearRect, copyRect, deleteCell, deleteGroups, duplicateGroups, fresh, getHit, insertAfter, insertFront,
   insertBack, isBoundary, merge, mergeGroups, moveGroups, parse, pasteClip, recolour, runs, setBpm, setHit, split, type Clip, type Pattern, type Rect,
@@ -46,6 +46,17 @@ const history = new History(loadSaved(), () => {
 const pattern = () => history.current;
 
 const engine = new Engine();
+
+// Row faders: one level per row, for every pattern (kept in this browser, not in undo).
+const MIX_KEY = 'orimono.mix.v1';
+let mix: Partial<Record<RowTag, RowMix>> = {};
+try { mix = JSON.parse(localStorage.getItem(MIX_KEY) ?? '{}'); } catch { /* ignore */ }
+engine.setMix(mix);
+function setRowMix(tag: RowTag, change: Partial<RowMix>) {
+  mix = { ...mix, [tag]: { db: 0, mute: false, solo: false, ...mix[tag], ...change } };
+  engine.setMix(mix);
+  localStorage.setItem(MIX_KEY, JSON.stringify(mix));
+}
 const scheduler = new Scheduler(engine, pattern);
 const renderer = new Renderer(canvas);
 
@@ -262,8 +273,45 @@ function button(label: string, onClick: () => void, opts: { disabled?: boolean; 
   return b;
 }
 
+function mixLine(tag: RowTag) {
+  const m = { db: 0, mute: false, solo: false, ...mix[tag] };
+  const line = document.createElement('div');
+  line.className = 'mix-line';
+  const name = document.createElement('span');
+  name.className = 'mix-tag';
+  name.textContent = tag;
+  const fader = document.createElement('input');
+  fader.type = 'range';
+  fader.min = '-24'; fader.max = '12'; fader.step = '0.5';
+  fader.value = String(m.db);
+  fader.title = 'Level (double-click for 0 dB)';
+  const val = document.createElement('span');
+  val.className = 'mix-db';
+  const show = (db: number) => (val.textContent = `${db > 0 ? '+' : ''}${db.toFixed(1)} dB`);
+  show(m.db);
+  const set = () => { setRowMix(tag, { db: +fader.value }); show(+fader.value); };
+  fader.oninput = set;
+  fader.ondblclick = () => { fader.value = '0'; set(); };
+  const toggle = (label: string, key: 'mute' | 'solo', title: string) => {
+    const b = button(label, () => { setRowMix(tag, { [key]: !mix[tag]?.[key] }); b.classList.toggle('on', !!mix[tag]?.[key]); });
+    b.classList.add('mix-toggle');
+    b.classList.toggle('on', m[key]);
+    b.title = title;
+    return b;
+  };
+  line.append(name, fader, val, toggle('M', 'mute', 'Mute'), toggle('S', 'solo', 'Solo'));
+  return line;
+}
+
+/** Copy the fader levels as one line of text (to share, or to make them the kit's defaults). */
+function copyLevels() {
+  const text = ROWS.map((t) => `${t} ${(mix[t]?.db ?? 0) >= 0 ? '+' : ''}${(mix[t]?.db ?? 0).toFixed(1)}`).join(', ');
+  void navigator.clipboard?.writeText(text);
+}
+
 function showActions() {
   actions.replaceChildren();
+  actions.classList.remove('mix');
   const L = layout;
   if (view.groupSel) {
     const [a, b] = view.groupSel;
@@ -300,6 +348,21 @@ function showActions() {
         : []),
     );
     place(L.xs[ti], L.numTop - 60);
+  } else if (view.rowSel) {
+    // Row actions: a fader per selected row, with mute and solo.
+    actions.classList.add('mix');
+    const [r0, r1] = view.rowSel;
+    for (let ri = r0; ri <= r1; ri++) actions.append(mixLine(ROWS[ri]));
+    const foot = document.createElement('div');
+    foot.className = 'mix-foot';
+    if (lastPointer === 'touch') foot.append(button('Copy', doCopy), button('Paste', doPaste, { disabled: !clip }));
+    foot.append(button('Copy levels', copyLevels));
+    actions.append(foot);
+    actions.hidden = false;
+    const w = actions.offsetWidth, h = actions.offsetHeight;
+    const yTop = L.top + r0 * L.rowH, yBot = L.top + (r1 + 1) * L.rowH;
+    const y = yBot + 6 + h <= L.numTop ? yBot + 6 : Math.max(4, yTop - h - 6);
+    place(LABEL_W + 8 + w / 2, y);
   } else if (lastPointer === 'touch' && selRect()) {
     // Touch has no ⌘C / ⌘V, so a selection offers them as buttons. (Random and Clear are in the toolbar.)
     const r = selRect()!;
@@ -586,7 +649,9 @@ canvas.addEventListener('pointerleave', () => { stripAnchor = null; if (!gesture
 
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Shift') shiftHeld = true;
-  if ((e.target as HTMLElement).tagName === 'INPUT') return;
+  const el = e.target as HTMLInputElement;
+  if (el.tagName === 'INPUT' && el.type !== 'range') return; // typing; a fader still lets Space play
+  if (el.type === 'range' && e.code !== 'Space') return;
   if ($<HTMLDialogElement>('credits').open) return;
   const mod = e.metaKey || e.ctrlKey;
   if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
@@ -629,7 +694,9 @@ function frame() {
       renderer.pluck(f.threadId, 0.8 + 2.2 * v, tau, freq);
     }
   }
-  renderer.draw(p, layout, { ...view, rect: selRect() });
+  const anySolo = ROWS.some((t) => mix[t]?.solo);
+  const quiet = ROWS.map((t) => !!mix[t]?.mute || (anySolo && !mix[t]?.solo));
+  renderer.draw(p, layout, { ...view, rect: selRect(), quiet });
   requestAnimationFrame(frame);
 }
 

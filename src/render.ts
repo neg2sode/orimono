@@ -17,6 +17,8 @@ export interface ViewState {
   stripSel: number | null;
   /** Whole rows picked by their name tags. */
   rowSel: [number, number] | null;
+  /** Rows silenced by mute or by another row's solo (their tags are dimmed). */
+  quiet?: boolean[];
 }
 
 interface Wobble { amp: number; t0: number; freq: number; tau: number }
@@ -116,10 +118,12 @@ export class Renderer {
       const hot = ((s.hover.kind === 'cell' || s.hover.kind === 'label') && s.hover.ri === ri)
         || (!!s.rowSel && ri >= s.rowSel[0] && ri <= s.rowSel[1]);
       roundRect(ctx, 10, y - 8, 30, 16, 3);
+      ctx.globalAlpha = s.quiet?.[ri] ? 0.35 : 1;
       ctx.fillStyle = hot ? UI.text : UI.tag;
       ctx.fill();
       ctx.fillStyle = UI.bg;
       ctx.fillText(tag, 25, y + 0.5);
+      ctx.globalAlpha = 1;
     });
 
     // Playhead glow.
