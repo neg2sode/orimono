@@ -29,13 +29,31 @@
         <button id="undo" title="Undo (⌘Z)">Undo</button>
         <button id="redo" title="Redo (⇧⌘Z)">Redo</button>
       </div>
+      <button id="new" title="Start again from 4+4+4+4 (undoable)">New</button>
       <div class="readout"><span id="len">16 threads</span><span id="secs">2.00 s</span></div>
-      <button id="new" class="ghost" title="Start again from 4+4+4+4 (undoable)">New</button>
+      <div class="divider" aria-hidden="true"></div>
+      <button id="sounds" class="ghost" title="Where the sounds come from">Sounds</button>
     </header>
     <main id="stage">
       <canvas id="grid"></canvas>
       <div id="actions" hidden></div>
     </main>
+    <dialog id="credits">
+      <h2>Sounds</h2>
+      <p>Drums, mixed from their microphones and EQ'd for Orimono:</p>
+      <ul>
+        <li>Kick, crash, high tom: <a href="https://www.drumgizmo.org/wiki/doku.php?id=kits:muldjordkit" target="_blank" rel="noopener">MuldjordKit</a>
+          by Lars Muldjord and the DrumGizmo team, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC-BY 4.0</a></li>
+        <li>Hi-hats, floor tom: <a href="https://www.drumgizmo.org/wiki/doku.php?id=kits:drskit" target="_blank" rel="noopener">DRSKit</a>
+          by the DrumGizmo team (Lars Muldjord, Bent Bisballe Nyeng) and Jes Eiler of DRSDrums, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC-BY 4.0</a></li>
+        <li>Ride: <a href="https://sfzinstruments.github.io/drums/big_rusty_drums" target="_blank" rel="noopener">Big Rusty Drums</a> by Karoryfer Samples, CC0</li>
+        <li>Snare, cross-stick: <a href="https://github.com/sfzinstruments/virtuosity_drums" target="_blank" rel="noopener">Virtuosity Drums</a> by Versilian Studios and Karoryfer Samples, CC0</li>
+      </ul>
+      <p>Percussion: <a href="https://github.com/sgossner/VCSL" target="_blank" rel="noopener">VCSL</a> by Versilian Studios, and
+        <a href="https://freepats.zenvoid.org/Percussion/world-and-rare-percussion.html" target="_blank" rel="noopener">FreePats World Percussion</a> (egg shaker), both CC0.</p>
+      <p>Changes: hits trimmed, mixed to stereo, EQ'd, some shortened, levels set.</p>
+      <form method="dialog"><button>Close</button></form>
+    </dialog>
     <div id="loading">Loading sounds…</div>
     <script type="module" src="/src/main.ts"></script>
   </body>

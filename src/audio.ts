@@ -7,7 +7,7 @@ import type { RowTag } from './constants';
 interface TakeDef { file: string; leadMs: number }
 interface LayerDef { loudDb: number; takes: TakeDef[] }
 interface RowDef { tag: RowTag; name: string; gainDb: number; floorMs: number; chokes: RowTag[]; layers: LayerDef[] }
-interface Manifest { sampleRate: number; rows: RowDef[] }
+interface Manifest { rows: RowDef[] }
 
 interface Take { buffer: AudioBuffer; lead: number }
 interface Layer { loudDb: number; takes: Take[] }

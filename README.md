@@ -48,15 +48,27 @@ Other commands:
 
 ## Sounds
 
-All public-domain (CC0):
+Drums (mixed from their per-microphone recordings to stereo, EQ'd towards a sound picked by ear,
+some shortened; see `tools/drums.py`):
 
-- Drums: [Virtuosity Drums](https://github.com/sfzinstruments/virtuosity_drums) by Versilian Studios and Karoryfer Samples
-  *(being picked by ear; until then the kit is built locally and not committed)*
-- Percussion: [VCSL](https://github.com/sgossner/VCSL) by Versilian Studios, and
-  [FreePats World Percussion](https://freepats.zenvoid.org/Percussion/world-and-rare-percussion.html) (egg shaker)
+- Kick, crash, high tom: [MuldjordKit](https://www.drumgizmo.org/wiki/doku.php?id=kits:muldjordkit)
+  by Lars Muldjord and the DrumGizmo team — [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+- Hi-hats, floor tom: [DRSKit](https://www.drumgizmo.org/wiki/doku.php?id=kits:drskit)
+  by the DrumGizmo team (Lars Muldjord, Bent Bisballe Nyeng) and Jes Eiler of DRSDrums —
+  [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+  (both from the [SFZ Instruments](https://sfzinstruments.github.io/drums) conversions)
+- Ride: [Big Rusty Drums](https://sfzinstruments.github.io/drums/big_rusty_drums) by Karoryfer Samples — CC0
+- Snare, cross-stick: [Virtuosity Drums](https://github.com/sfzinstruments/virtuosity_drums)
+  by Versilian Studios and Karoryfer Samples — CC0
+
+Percussion, all CC0: [VCSL](https://github.com/sgossner/VCSL) by Versilian Studios, and
+[FreePats World Percussion](https://freepats.zenvoid.org/Percussion/world-and-rare-percussion.html) (egg shaker).
+
+Changes made to all of them: hits trimmed, mixed to stereo, EQ'd, some shortened, levels set.
+The processed sounds in `public/kit/` are under the same licences as their sources.
 
 `tools/build_kit.py` builds `public/kit/` (trimmed FLAC + `manifest.json`) from those libraries, which live
-outside this repo.
+outside this repo (`npm run kit`).
 
 ## Deploying
 

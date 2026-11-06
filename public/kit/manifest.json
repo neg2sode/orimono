@@ -1,0 +1,1192 @@
+{
+ "rows": [
+  {
+   "tag": "CR",
+   "name": "Crash",
+   "gainDb": -9.3,
+   "floorMs": 50,
+   "chokes": [],
+   "layers": [
+    {
+     "loudDb": -18.0,
+     "takes": [
+      {
+       "file": "CR-1-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "CR-1-2.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": -10.5,
+     "takes": [
+      {
+       "file": "CR-2-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "CR-2-2.flac",
+       "leadMs": 1
+      }
+     ]
+    },
+    {
+     "loudDb": -3.9,
+     "takes": [
+      {
+       "file": "CR-3-1.flac",
+       "leadMs": 5
+      },
+      {
+       "file": "CR-3-2.flac",
+       "leadMs": 6
+      }
+     ]
+    },
+    {
+     "loudDb": -2.1,
+     "takes": [
+      {
+       "file": "CR-4-1.flac",
+       "leadMs": 2
+      },
+      {
+       "file": "CR-4-2.flac",
+       "leadMs": 5
+      }
+     ]
+    },
+    {
+     "loudDb": 0.0,
+     "takes": [
+      {
+       "file": "CR-5-1.flac",
+       "leadMs": 5
+      },
+      {
+       "file": "CR-5-2.flac",
+       "leadMs": 5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tag": "RD",
+   "name": "Ride",
+   "gainDb": -8.1,
+   "floorMs": 50,
+   "chokes": [],
+   "layers": [
+    {
+     "loudDb": -20.8,
+     "takes": [
+      {
+       "file": "RD-1-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "RD-1-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "RD-1-3.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": -13.2,
+     "takes": [
+      {
+       "file": "RD-2-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "RD-2-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "RD-2-3.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": -9.2,
+     "takes": [
+      {
+       "file": "RD-3-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "RD-3-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "RD-3-3.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": -3.6,
+     "takes": [
+      {
+       "file": "RD-4-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "RD-4-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "RD-4-3.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": 0.0,
+     "takes": [
+      {
+       "file": "RD-5-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "RD-5-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "RD-5-3.flac",
+       "leadMs": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tag": "OH",
+   "name": "Open hat",
+   "gainDb": -15.8,
+   "floorMs": 50,
+   "chokes": [],
+   "layers": [
+    {
+     "loudDb": -16.7,
+     "takes": [
+      {
+       "file": "OH-1-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "OH-1-2.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": -10.7,
+     "takes": [
+      {
+       "file": "OH-2-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "OH-2-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "OH-2-3.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": -6.5,
+     "takes": [
+      {
+       "file": "OH-3-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "OH-3-2.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": -3.3,
+     "takes": [
+      {
+       "file": "OH-4-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "OH-4-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "OH-4-3.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": 0.0,
+     "takes": [
+      {
+       "file": "OH-5-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "OH-5-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "OH-5-3.flac",
+       "leadMs": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tag": "CH",
+   "name": "Closed hat",
+   "gainDb": -10.6,
+   "floorMs": 40,
+   "chokes": [
+    "OH"
+   ],
+   "layers": [
+    {
+     "loudDb": -23.7,
+     "takes": [
+      {
+       "file": "CH-1-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "CH-1-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "CH-1-3.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": -12.1,
+     "takes": [
+      {
+       "file": "CH-2-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "CH-2-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "CH-2-3.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": -7.5,
+     "takes": [
+      {
+       "file": "CH-3-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "CH-3-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "CH-3-3.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": -3.5,
+     "takes": [
+      {
+       "file": "CH-4-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "CH-4-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "CH-4-3.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": 0.0,
+     "takes": [
+      {
+       "file": "CH-5-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "CH-5-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "CH-5-3.flac",
+       "leadMs": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tag": "PH",
+   "name": "Pedal hat",
+   "gainDb": -14.9,
+   "floorMs": 40,
+   "chokes": [
+    "OH"
+   ],
+   "layers": [
+    {
+     "loudDb": -13.2,
+     "takes": [
+      {
+       "file": "PH-1-1.flac",
+       "leadMs": 1
+      }
+     ]
+    },
+    {
+     "loudDb": -5.9,
+     "takes": [
+      {
+       "file": "PH-2-1.flac",
+       "leadMs": 12
+      },
+      {
+       "file": "PH-2-2.flac",
+       "leadMs": 9
+      }
+     ]
+    },
+    {
+     "loudDb": -2.9,
+     "takes": [
+      {
+       "file": "PH-3-1.flac",
+       "leadMs": 2
+      }
+     ]
+    },
+    {
+     "loudDb": -1.1,
+     "takes": [
+      {
+       "file": "PH-4-1.flac",
+       "leadMs": 1
+      },
+      {
+       "file": "PH-4-2.flac",
+       "leadMs": 10
+      }
+     ]
+    },
+    {
+     "loudDb": 0.0,
+     "takes": [
+      {
+       "file": "PH-5-1.flac",
+       "leadMs": 9
+      },
+      {
+       "file": "PH-5-2.flac",
+       "leadMs": 18
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tag": "SH",
+   "name": "Egg shaker",
+   "gainDb": -5.6,
+   "floorMs": 40,
+   "chokes": [],
+   "layers": [
+    {
+     "loudDb": 0.0,
+     "takes": [
+      {
+       "file": "SH-1-1.flac",
+       "leadMs": 32
+      },
+      {
+       "file": "SH-1-2.flac",
+       "leadMs": 6
+      },
+      {
+       "file": "SH-1-3.flac",
+       "leadMs": 8
+      },
+      {
+       "file": "SH-1-4.flac",
+       "leadMs": 2
+      },
+      {
+       "file": "SH-1-5.flac",
+       "leadMs": 1
+      },
+      {
+       "file": "SH-1-6.flac",
+       "leadMs": 6
+      },
+      {
+       "file": "SH-1-7.flac",
+       "leadMs": 9
+      },
+      {
+       "file": "SH-1-8.flac",
+       "leadMs": 5
+      },
+      {
+       "file": "SH-1-9.flac",
+       "leadMs": 2
+      },
+      {
+       "file": "SH-1-10.flac",
+       "leadMs": 2
+      },
+      {
+       "file": "SH-1-11.flac",
+       "leadMs": 4
+      },
+      {
+       "file": "SH-1-12.flac",
+       "leadMs": 3
+      },
+      {
+       "file": "SH-1-13.flac",
+       "leadMs": 15
+      },
+      {
+       "file": "SH-1-14.flac",
+       "leadMs": 7
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tag": "TB",
+   "name": "Tambourine",
+   "gainDb": 9.9,
+   "floorMs": 40,
+   "chokes": [],
+   "layers": [
+    {
+     "loudDb": 0.0,
+     "takes": [
+      {
+       "file": "TB-1-1.flac",
+       "leadMs": 118
+      },
+      {
+       "file": "TB-1-2.flac",
+       "leadMs": 47
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tag": "CB",
+   "name": "Cowbell",
+   "gainDb": -6.1,
+   "floorMs": 50,
+   "chokes": [],
+   "layers": [
+    {
+     "loudDb": -8.8,
+     "takes": [
+      {
+       "file": "CB-1-1.flac",
+       "leadMs": 1
+      }
+     ]
+    },
+    {
+     "loudDb": 0.0,
+     "takes": [
+      {
+       "file": "CB-2-1.flac",
+       "leadMs": 1
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tag": "CL",
+   "name": "Claves",
+   "gainDb": 8.3,
+   "floorMs": 40,
+   "chokes": [],
+   "layers": [
+    {
+     "loudDb": -21.8,
+     "takes": [
+      {
+       "file": "CL-1-1.flac",
+       "leadMs": 2
+      }
+     ]
+    },
+    {
+     "loudDb": -8.9,
+     "takes": [
+      {
+       "file": "CL-2-1.flac",
+       "leadMs": 2
+      }
+     ]
+    },
+    {
+     "loudDb": 0.0,
+     "takes": [
+      {
+       "file": "CL-3-1.flac",
+       "leadMs": 2
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tag": "XS",
+   "name": "Cross-stick",
+   "gainDb": -6.4,
+   "floorMs": 40,
+   "chokes": [],
+   "layers": [
+    {
+     "loudDb": -32.3,
+     "takes": [
+      {
+       "file": "XS-1-1.flac",
+       "leadMs": 5
+      },
+      {
+       "file": "XS-1-2.flac",
+       "leadMs": 1
+      },
+      {
+       "file": "XS-1-3.flac",
+       "leadMs": 2
+      }
+     ]
+    },
+    {
+     "loudDb": -20.1,
+     "takes": [
+      {
+       "file": "XS-2-1.flac",
+       "leadMs": 3
+      },
+      {
+       "file": "XS-2-2.flac",
+       "leadMs": 2
+      },
+      {
+       "file": "XS-2-3.flac",
+       "leadMs": 3
+      }
+     ]
+    },
+    {
+     "loudDb": -10.3,
+     "takes": [
+      {
+       "file": "XS-3-1.flac",
+       "leadMs": 2
+      },
+      {
+       "file": "XS-3-2.flac",
+       "leadMs": 2
+      },
+      {
+       "file": "XS-3-3.flac",
+       "leadMs": 1
+      }
+     ]
+    },
+    {
+     "loudDb": -3.4,
+     "takes": [
+      {
+       "file": "XS-4-1.flac",
+       "leadMs": 2
+      },
+      {
+       "file": "XS-4-2.flac",
+       "leadMs": 2
+      },
+      {
+       "file": "XS-4-3.flac",
+       "leadMs": 1
+      }
+     ]
+    },
+    {
+     "loudDb": 0.0,
+     "takes": [
+      {
+       "file": "XS-5-1.flac",
+       "leadMs": 2
+      },
+      {
+       "file": "XS-5-2.flac",
+       "leadMs": 1
+      },
+      {
+       "file": "XS-5-3.flac",
+       "leadMs": 2
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tag": "CP",
+   "name": "Claps",
+   "gainDb": -6.5,
+   "floorMs": 60,
+   "chokes": [],
+   "layers": [
+    {
+     "loudDb": 0.0,
+     "takes": [
+      {
+       "file": "CP-1-1.flac",
+       "leadMs": 2
+      },
+      {
+       "file": "CP-1-2.flac",
+       "leadMs": 2
+      },
+      {
+       "file": "CP-1-3.flac",
+       "leadMs": 2
+      },
+      {
+       "file": "CP-1-4.flac",
+       "leadMs": 3
+      },
+      {
+       "file": "CP-1-5.flac",
+       "leadMs": 3
+      },
+      {
+       "file": "CP-1-6.flac",
+       "leadMs": 2
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tag": "BG",
+   "name": "Bongo",
+   "gainDb": 1.5,
+   "floorMs": 50,
+   "chokes": [],
+   "layers": [
+    {
+     "loudDb": -22.0,
+     "takes": [
+      {
+       "file": "BG-1-1.flac",
+       "leadMs": 4
+      },
+      {
+       "file": "BG-1-2.flac",
+       "leadMs": 1
+      }
+     ]
+    },
+    {
+     "loudDb": -9.7,
+     "takes": [
+      {
+       "file": "BG-2-1.flac",
+       "leadMs": 4
+      },
+      {
+       "file": "BG-2-2.flac",
+       "leadMs": 2
+      }
+     ]
+    },
+    {
+     "loudDb": 0.0,
+     "takes": [
+      {
+       "file": "BG-3-1.flac",
+       "leadMs": 4
+      },
+      {
+       "file": "BG-3-2.flac",
+       "leadMs": 4
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tag": "CG",
+   "name": "Quinto",
+   "gainDb": 2.5,
+   "floorMs": 50,
+   "chokes": [],
+   "layers": [
+    {
+     "loudDb": -17.2,
+     "takes": [
+      {
+       "file": "CG-1-1.flac",
+       "leadMs": 1
+      },
+      {
+       "file": "CG-1-2.flac",
+       "leadMs": 1
+      }
+     ]
+    },
+    {
+     "loudDb": -9.4,
+     "takes": [
+      {
+       "file": "CG-2-1.flac",
+       "leadMs": 1
+      },
+      {
+       "file": "CG-2-2.flac",
+       "leadMs": 1
+      }
+     ]
+    },
+    {
+     "loudDb": 0.0,
+     "takes": [
+      {
+       "file": "CG-3-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "CG-3-2.flac",
+       "leadMs": 1
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tag": "DB",
+   "name": "Darbuka",
+   "gainDb": 8.1,
+   "floorMs": 50,
+   "chokes": [],
+   "layers": [
+    {
+     "loudDb": -8.1,
+     "takes": [
+      {
+       "file": "DB-1-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "DB-1-2.flac",
+       "leadMs": 1
+      }
+     ]
+    },
+    {
+     "loudDb": 0.0,
+     "takes": [
+      {
+       "file": "DB-2-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "DB-2-2.flac",
+       "leadMs": 1
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tag": "HT",
+   "name": "High tom",
+   "gainDb": -6.0,
+   "floorMs": 50,
+   "chokes": [],
+   "layers": [
+    {
+     "loudDb": -10.2,
+     "takes": [
+      {
+       "file": "HT-1-1.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": -7.2,
+     "takes": [
+      {
+       "file": "HT-2-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "HT-2-2.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": -4.1,
+     "takes": [
+      {
+       "file": "HT-3-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "HT-3-2.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": -2.0,
+     "takes": [
+      {
+       "file": "HT-4-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "HT-4-2.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": 0.0,
+     "takes": [
+      {
+       "file": "HT-5-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "HT-5-2.flac",
+       "leadMs": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tag": "FT",
+   "name": "Floor tom",
+   "gainDb": -4.5,
+   "floorMs": 50,
+   "chokes": [],
+   "layers": [
+    {
+     "loudDb": -14.1,
+     "takes": [
+      {
+       "file": "FT-1-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "FT-1-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "FT-1-3.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": -8.7,
+     "takes": [
+      {
+       "file": "FT-2-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "FT-2-2.flac",
+       "leadMs": 1
+      },
+      {
+       "file": "FT-2-3.flac",
+       "leadMs": 1
+      }
+     ]
+    },
+    {
+     "loudDb": -5.2,
+     "takes": [
+      {
+       "file": "FT-3-1.flac",
+       "leadMs": 1
+      },
+      {
+       "file": "FT-3-2.flac",
+       "leadMs": 1
+      },
+      {
+       "file": "FT-3-3.flac",
+       "leadMs": 1
+      }
+     ]
+    },
+    {
+     "loudDb": -2.3,
+     "takes": [
+      {
+       "file": "FT-4-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "FT-4-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "FT-4-3.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": 0.0,
+     "takes": [
+      {
+       "file": "FT-5-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "FT-5-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "FT-5-3.flac",
+       "leadMs": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tag": "SD",
+   "name": "Snare",
+   "gainDb": -3.6,
+   "floorMs": 50,
+   "chokes": [],
+   "layers": [
+    {
+     "loudDb": -26.1,
+     "takes": [
+      {
+       "file": "SD-1-1.flac",
+       "leadMs": 2
+      },
+      {
+       "file": "SD-1-2.flac",
+       "leadMs": 1
+      },
+      {
+       "file": "SD-1-3.flac",
+       "leadMs": 1
+      }
+     ]
+    },
+    {
+     "loudDb": -16.5,
+     "takes": [
+      {
+       "file": "SD-2-1.flac",
+       "leadMs": 1
+      },
+      {
+       "file": "SD-2-2.flac",
+       "leadMs": 1
+      },
+      {
+       "file": "SD-2-3.flac",
+       "leadMs": 2
+      }
+     ]
+    },
+    {
+     "loudDb": -11.4,
+     "takes": [
+      {
+       "file": "SD-3-1.flac",
+       "leadMs": 2
+      },
+      {
+       "file": "SD-3-2.flac",
+       "leadMs": 1
+      },
+      {
+       "file": "SD-3-3.flac",
+       "leadMs": 2
+      }
+     ]
+    },
+    {
+     "loudDb": -6.6,
+     "takes": [
+      {
+       "file": "SD-4-1.flac",
+       "leadMs": 2
+      },
+      {
+       "file": "SD-4-2.flac",
+       "leadMs": 1
+      },
+      {
+       "file": "SD-4-3.flac",
+       "leadMs": 2
+      }
+     ]
+    },
+    {
+     "loudDb": 0.0,
+     "takes": [
+      {
+       "file": "SD-5-1.flac",
+       "leadMs": 1
+      },
+      {
+       "file": "SD-5-2.flac",
+       "leadMs": 1
+      },
+      {
+       "file": "SD-5-3.flac",
+       "leadMs": 2
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tag": "BD",
+   "name": "Kick",
+   "gainDb": 0.3,
+   "floorMs": 60,
+   "chokes": [],
+   "layers": [
+    {
+     "loudDb": -12.7,
+     "takes": [
+      {
+       "file": "BD-1-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "BD-1-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "BD-1-3.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": -6.9,
+     "takes": [
+      {
+       "file": "BD-2-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "BD-2-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "BD-2-3.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": -3.7,
+     "takes": [
+      {
+       "file": "BD-3-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "BD-3-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "BD-3-3.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": -0.8,
+     "takes": [
+      {
+       "file": "BD-4-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "BD-4-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "BD-4-3.flac",
+       "leadMs": 0
+      }
+     ]
+    },
+    {
+     "loudDb": 0.0,
+     "takes": [
+      {
+       "file": "BD-5-1.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "BD-5-2.flac",
+       "leadMs": 0
+      },
+      {
+       "file": "BD-5-3.flac",
+       "leadMs": 0
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

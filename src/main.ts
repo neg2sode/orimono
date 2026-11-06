@@ -139,6 +139,8 @@ $('undo').onclick = () => { history.undo(); clearSelection(); };
 $('redo').onclick = () => { history.redo(); clearSelection(); };
 $('tool-draw').onclick = () => setTool('draw');
 $('tool-select').onclick = () => setTool('select');
+$('sounds').onclick = () => $<HTMLDialogElement>('credits').showModal();
+
 $('new').onclick = () => {
   const f = fresh();
   f.bpm = pattern().bpm;
@@ -469,6 +471,7 @@ canvas.addEventListener('pointerleave', () => { if (!gesture) view.hover = { kin
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Shift') shiftHeld = true;
   if ((e.target as HTMLElement).tagName === 'INPUT') return;
+  if ($<HTMLDialogElement>('credits').open) return;
   const mod = e.metaKey || e.ctrlKey;
   if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
   else if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? history.redo() : history.undo(); clearSelection(); }

@@ -14,43 +14,46 @@ Needs sox and ffmpeg on PATH. Run from the app folder:  npm run kit
 """
 import json, math, os, re, shutil, subprocess, sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import drums
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 APP = os.path.dirname(HERE)
 PROJECT = os.path.dirname(APP)
 OUT = os.path.join(APP, "public", "kit")
 
-GSCW = os.path.join(PROJECT, "GSCW DRUMS Library Vol.1")
-K1 = os.path.join(GSCW, "G&S CW-Drum Kit-1")
-K2 = os.path.join(GSCW, "G&S CW-Drum Kit-2")
 VCSL = os.path.join(PROJECT, "VCSL-percussion")
 FP = os.path.join(PROJECT, "FreePats-world-percussion", "WorldPercussion SFZ+WAV-20200905", "samples")
 
 MAX_LAYERS = 5
-SR = 48000
+MAX_TAKES = 3  # for drum rows, where every recorded hit has its own strength
+DRUMS = "drums"  # folder marker: hits come from drums.py (mixed and EQ'd multi-mic kits)
+SR = 48000  # for measuring only: files keep the rate they were recorded at (44.1 or 48 kHz)
 
+# Kick and toms are stored mono: their stereo side is 30-60 dB under the middle, inaudible.
 # tag, name, folder, filename regex, stereo, loudness target (dB, see below), floor ms, max length s, chokes
 # ("takes" in the last list means: every file is a take of one single strength.)
 # Loudness target: the loudest strength's average level over its first 100 ms is set to this.
 # These are starting points for the mix, to be tuned by ear.
 ROWS = [
-    ("CR", "Crash", f"{K2}/14", r"^V\d+-crash-14", True, -21, 50, 3.0, []),
-    ("RD", "Ride", f"{K2}/Ride", r"Ride-22", True, -23, 50, 2.5, []),
-    ("OH", "Open hat", f"{K1}/Hats-1", r"^HHats-OP-V", True, -22, 50, 1.6, []),
-    ("CH", "Closed hat", f"{K1}/Hats-1", r"^HHats-CL-V", True, -22, 40, 0.6, ["OH"]),
-    ("PH", "Pedal hat", f"{K1}/Hats-1", r"^HHats-PDL-V", True, -25, 40, 0.5, ["OH"]),
+    ("CR", "Crash", DRUMS, "", True, -21, 50, 3.0, []),
+    ("RD", "Ride", DRUMS, "", True, -23, 50, 2.5, []),
+    ("OH", "Open hat", DRUMS, "", True, -22, 50, 1.6, []),
+    ("CH", "Closed hat", DRUMS, "", True, -22, 40, 0.6, ["OH"]),
+    ("PH", "Pedal hat", DRUMS, "", True, -25, 40, 0.5, ["OH"]),
     ("SH", "Egg shaker", f"{FP}/EggShaker", r"^soft_", False, -24, 40, 0.4, ["takes"]),
     ("TB", "Tambourine", f"{VCSL}/Tambourine 1", r"^Tamb1_Shake", True, -24, 40, 0.8, []),
     ("CB", "Cowbell", f"{VCSL}/Cowbells", r"^Cowbell2_Normal", False, -22, 50, 0.8, []),
     ("CL", "Claves", f"{VCSL}/Claves", r"^Claves1_Hit", False, -22, 40, 0.6, []),
-    ("XS", "Cross-stick", f"{K2}/CW snare drum/Snare Side Stick", r"SStick", False, -20, 40, 0.5, []),
+    ("XS", "Cross-stick", DRUMS, "", True, -20, 40, 0.5, []),
     ("CP", "Claps", f"{VCSL}/Claps", r"^Clap_rr", True, -19, 60, 0.6, []),
     ("BG", "Bongo", f"{VCSL}/Bongos", r"^BongoL_Hit1_", False, -18, 50, 0.7, []),
     ("CG", "Quinto", f"{VCSL}/Conga", r"^Quinto_HitN_", False, -18, 50, 0.8, []),
     ("DB", "Darbuka", f"{VCSL}/Darbuka", r"^Darbuka_4_hit", False, -18, 50, 0.7, []),
-    ("HT", "High tom", f"{K2}/Tom10", r"TTom 10", False, -17, 50, 1.4, []),
-    ("FT", "Floor tom", f"{K2}/Tom13", r"TTom13", False, -16, 50, 1.6, []),
-    ("SD", "Snare", f"{K1}/Snare hits-1", r"^SNARE-V", False, -15, 50, 0.8, []),
-    ("BD", "Kick", f"{K2}/YMH-kick-drum", r"EQ-KD", False, -13, 60, 0.9, []),
+    ("HT", "High tom", DRUMS, "", False, -17, 50, 1.4, []),
+    ("FT", "Floor tom", DRUMS, "", False, -16, 50, 1.6, []),
+    ("SD", "Snare", DRUMS, "", True, -15, 50, 0.8, []),
+    ("BD", "Kick", DRUMS, "", False, -13, 60, 0.9, []),
 ]
 
 
@@ -92,6 +95,11 @@ def measure(path):
     return dict(start_ms=start, end_ms=end, loud=loud, lead_ms=min(lead, 120))
 
 
+def peak_db(path):
+    r = subprocess.run(["sox", path, "-n", "stats"], capture_output=True, text=True)
+    return next(float(l.split()[-1]) for l in r.stderr.splitlines() if l.startswith("Pk lev dB"))
+
+
 def layer_key(name):
     """File name without its take number: files sharing a key are takes of one strength."""
     return re.sub(r"_?rr\d+", "", name)
@@ -101,35 +109,55 @@ def main():
     if os.path.isdir(OUT):
         shutil.rmtree(OUT)
     os.makedirs(OUT)
-    manifest = {"sampleRate": SR, "rows": []}
+    manifest = {"rows": []}
     total = 0
     for tag, name, folder, pat, stereo, target, floor, maxlen, chokes in ROWS:
-        files = sorted(f for f in os.listdir(folder) if f.lower().endswith(".wav") and re.search(pat, f))
-        if not files:
-            sys.exit(f"{tag}: no files match {pat!r} in {folder}")
-        layers = {}
-        for f in files:
-            m = measure(os.path.join(folder, f))
-            key = "all" if "takes" in chokes else layer_key(f)
-            layers.setdefault(key, []).append((f, m))
-        # Order strengths by measured loudness (file numbering is not always in order).
-        ordered = sorted(layers.values(), key=lambda takes: sum(m["loud"] for _, m in takes) / len(takes))
-        if len(ordered) > MAX_LAYERS:
-            idx = sorted({round(i * (len(ordered) - 1) / (MAX_LAYERS - 1)) for i in range(MAX_LAYERS)})
-            ordered = [ordered[i] for i in idx]
-        top = sum(m["loud"] for _, m in ordered[-1]) / len(ordered[-1])
+        ring = None
+        if folder == DRUMS:
+            paths, ring = drums.files(tag)
+            measured = sorted(((p, measure(p)) for p in paths), key=lambda x: x[1]["loud"])
+            # Every hit was played at its own strength: split them by loudness into strength
+            # buckets and use up to MAX_TAKES hits of each bucket as its takes.
+            n = min(MAX_LAYERS, len(measured))
+            ordered = []
+            for b in range(n):
+                bucket = measured[b * len(measured) // n:(b + 1) * len(measured) // n]
+                pick = sorted({round(i * (len(bucket) - 1) / max(1, MAX_TAKES - 1)) for i in range(MAX_TAKES)})
+                ordered.append([bucket[i] for i in pick])
+        else:
+            files = sorted(f for f in os.listdir(folder) if f.lower().endswith(".wav") and re.search(pat, f))
+            if not files:
+                sys.exit(f"{tag}: no files match {pat!r} in {folder}")
+            layers = {}
+            for f in files:
+                p = os.path.join(folder, f)
+                key = "all" if "takes" in chokes else layer_key(f)
+                layers.setdefault(key, []).append((p, measure(p)))
+            # Order strengths by measured loudness (file numbering is not always in order).
+            ordered = sorted(layers.values(), key=lambda takes: sum(m["loud"] for _, m in takes) / len(takes))
+            if len(ordered) > MAX_LAYERS:
+                idx = sorted({round(i * (len(ordered) - 1) / (MAX_LAYERS - 1)) for i in range(MAX_LAYERS)})
+                ordered = [ordered[i] for i in idx]
+        # Drum rows: raise the whole row (by one amount, so strengths keep their relation) to
+        # peak at -1 dBFS before writing 16-bit files, so quiet sources don't lose resolution.
+        norm = 0.0
+        if folder == DRUMS:
+            norm = -1 - max(peak_db(f) for takes in ordered for f, _ in takes)
+        top = sum(m["loud"] for _, m in ordered[-1]) / len(ordered[-1]) + norm
         row = {"tag": tag, "name": name, "gainDb": round(target - top, 1), "floorMs": floor,
                "chokes": [c for c in chokes if c != "takes"], "layers": []}
         for li, takes in enumerate(ordered):
-            entry = {"loudDb": round(sum(m["loud"] for _, m in takes) / len(takes) - top, 1), "takes": []}
+            entry = {"loudDb": round(sum(m["loud"] for _, m in takes) / len(takes) + norm - top, 1), "takes": []}
             for ti, (f, m) in enumerate(takes):
                 dur = min((m["end_ms"] - m["start_ms"]) / 1000, maxlen)
                 fade = min(0.05, dur / 4)
+                if ring and dur > ring / 1000:  # shortened ring: fade over the second half
+                    dur = ring / 1000; fade = dur / 2
                 out = f"{tag}-{li + 1}-{ti + 1}.flac"
                 subprocess.run(
-                    ["sox", os.path.join(folder, f), "-r", str(SR), "-c", "2" if stereo else "1", "-b", "16",
+                    ["sox", f, "-c", "2" if stereo else "1", "-b", "16", "-C", "8",
                      os.path.join(OUT, out), "trim", f"{m['start_ms'] / 1000:.4f}", f"{dur:.4f}",
-                     "fade", "0", f"{dur:.4f}", f"{fade:.4f}"], check=True, stderr=subprocess.DEVNULL)
+                     "fade", "0", f"{dur:.4f}", f"{fade:.4f}", "vol", f"{norm:.2f}dB"], check=True, stderr=subprocess.DEVNULL)
                 total += os.path.getsize(os.path.join(OUT, out))
                 entry["takes"].append({"file": out, "leadMs": m["lead_ms"]})
             row["layers"].append(entry)
