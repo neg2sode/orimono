@@ -45,8 +45,8 @@ button.ghost { border-color: transparent; color: var(--dim); }
 .knob-body { fill: #1f1b17; stroke: var(--border); stroke-width: 1.5; }
 .knob-arc { fill: none; stroke: var(--caramel); stroke-width: 3; stroke-linecap: round; }
 .knob-tick { stroke: var(--text); stroke-width: 2.5; stroke-linecap: round; }
-.bpm { display: flex; align-items: baseline; gap: 4px; min-width: 74px; }
-.bpm span { font-size: 24px; font-weight: 600; min-width: 44px; font-variant-numeric: tabular-nums; } /* room for three digits, so the toolbar holds still */
+.bpm { display: flex; align-items: baseline; gap: 4px; min-width: 94px; } /* room for three digits and "playback", so the toolbar holds still */
+.bpm span { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .bpm small { color: var(--secondary); font-size: 11px; }
 .tempo.local .bpm span { color: var(--caramel); }
 /* "playback" hangs above "BPM" without moving anything: the number keeps its place. */
@@ -156,7 +156,7 @@ button:focus:not(:focus-visible) { outline: none; }
 .zoom-grid button.lossy { opacity: 0.45; }
 #zoom-pop .zoom-foot { margin-top: 8px; font-size: 11px; }
 #zoom-pop {
-  position: absolute; top: calc(100% + 8px); left: 0; z-index: 5; width: 232px;
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 5; width: 232px;
   background: var(--panel); border: 1px solid #00000060; border-radius: 8px; box-shadow: 0 6px 18px #0008;
   padding: 10px 12px; font-size: 13px;
 }

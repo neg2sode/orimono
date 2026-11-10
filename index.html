@@ -20,37 +20,37 @@
         <div class="bpm"><span id="bpm">72</span><small>BPM</small></div>
         <input id="bpm-input" type="number" min="10" max="300" step="0.1" hidden />
       </div>
-      <div class="random-wrap">
-        <button id="random" class="primary" title="Random: fill your groups (or the selection) with a beat. Your own notes stay. Shift-click: same style again">Random</button>
-        <span id="style-tag" aria-live="polite"></span>
-      </div>
-      <div class="zoom-wrap">
-        <button id="zoom" class="zoom" aria-label="Zoom">
-          <svg class="z-fibre" viewBox="0 0 36 28" preserveAspectRatio="none" aria-hidden="true">
-            <path d="M36 14 C24 14 16 4 2 3 M36 14 C24 14 16 9 2 8.5 M36 14 H2 M36 14 C24 14 16 19 2 19.5 M36 14 C24 14 16 24 2 25" />
-          </svg>
-          <span class="z-thread" aria-hidden="true"></span>
-          <svg class="z-fabric" viewBox="0 0 36 28" preserveAspectRatio="none" aria-hidden="true">
-            <path d="M0 14 H34 M8 7 H34 M8 21 H34 M13 3 V25 M21 3 V25 M29 3 V25" />
-          </svg>
-        </button>
-        <div id="fibre-count" class="seg" role="group" aria-label="Fibres per thread" hidden>
-          <button id="fib-less" title="Fewer fibres per thread">–</button>
-          <button id="fib-n" title="Fibres per thread: click for every choice">×2</button>
-          <button id="fib-more" title="More fibres per thread">+</button>
-        </div>
-        <div id="zoom-pop" hidden></div>
-      </div>
       <div class="seg" role="group" aria-label="Tool">
         <button id="tool-draw" class="on" title="Draw (D): tap, swipe, long-press to pluck">Draw</button>
         <button id="tool-select" title="Select (S, or hold Shift): rectangle in the grid, groups in the band">Select</button>
       </div>
+      <div class="random-wrap">
+        <button id="random" class="primary" title="Random: fill your groups (or the selection) with a beat. Your own notes stay. Shift-click: same style again">Random</button>
+        <span id="style-tag" aria-live="polite"></span>
+      </div>
+      <button id="clear" title="Clear notes in the selection, or all notes if nothing is selected. Groups stay. (Undoable)">Clear</button>
       <div class="seg">
         <button id="undo" title="Undo (⌘Z)">Undo</button>
         <button id="redo" title="Redo (⇧⌘Z)">Redo</button>
       </div>
-      <button id="clear" title="Clear notes in the selection, or all notes if nothing is selected. Groups stay. (Undoable)">Clear</button>
       <div class="panel-end">
+        <div class="zoom-wrap">
+          <div id="fibre-count" class="seg" role="group" aria-label="Fibres per thread" hidden>
+            <button id="fib-less" title="Fewer fibres per thread">–</button>
+            <button id="fib-n" title="Fibres per thread: click for every choice">×2</button>
+            <button id="fib-more" title="More fibres per thread">+</button>
+          </div>
+          <button id="zoom" class="zoom" aria-label="Zoom">
+            <svg class="z-fibre" viewBox="0 0 36 28" preserveAspectRatio="none" aria-hidden="true">
+              <path d="M36 14 C24 14 16 4 2 3 M36 14 C24 14 16 9 2 8.5 M36 14 H2 M36 14 C24 14 16 19 2 19.5 M36 14 C24 14 16 24 2 25" />
+            </svg>
+            <span class="z-thread" aria-hidden="true"></span>
+            <svg class="z-fabric" viewBox="0 0 36 28" preserveAspectRatio="none" aria-hidden="true">
+              <path d="M0 14 H34 M8 7 H34 M8 21 H34 M13 3 V25 M21 3 V25 M29 3 V25" />
+            </svg>
+          </button>
+          <div id="zoom-pop" hidden></div>
+        </div>
         <div class="length-wrap">
           <button id="length" class="readout" title="Length. Click to start from scratch">
             <span id="len">16 threads</span><span id="secs">3.33 s</span>
