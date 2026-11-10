@@ -2,7 +2,7 @@
 // size is their velocity, and strings wobble when the playhead plucks them.
 
 import { LABEL_W, cellL, cellR, fibreX, gapX, regionBox, rowY, type Layout, type Target } from './layout';
-import { PALETTE, ROWS, UI } from './constants';
+import { PALETTE, ROWS, UI, zoomColour } from './constants';
 import type { Pattern, Rect } from './model';
 
 export interface ViewState {
@@ -214,11 +214,15 @@ export class Renderer {
           // A zoomed cell is a place to go into: a soft patch of its colour marks it. Inside,
           // its fibres stand as full strings.
           const inside = inReg(ti, ri) ? u : 0;
-          ctx.globalAlpha = a * 0.1;
-          ctx.fillStyle = colour;
-          ctx.fillRect(xs[ti] - L.pad, y - L.rowH / 2 + 1.5, L.colW, L.rowH - 3);
-          ctx.globalAlpha = a * (0.38 + 0.22 * inside);
-          ctx.strokeStyle = colour;
+          // The patch, the fibres and the notes between the beats take the zoom's own colour;
+          // the thread's string and the note on the beat keep the group's.
+          const zc = zoomColour(z);
+          const nextPlain = (p.threads[ti + 1]?.lanes[row]?.zoom ?? 1) === 1;
+          ctx.globalAlpha = a * 0.13;
+          ctx.fillStyle = zc;
+          ctx.fillRect(xs[ti] - L.pad, y - L.rowH / 2 + 1.5, L.colW + (nextPlain ? Math.max(0, L.pad - 3) : 0), L.rowH - 3);
+          ctx.globalAlpha = a * (0.5 + 0.25 * inside);
+          ctx.strokeStyle = zc;
           ctx.lineWidth = 1;
           ctx.beginPath();
           for (let k = 1; k < z; k++) {
@@ -239,7 +243,7 @@ export class Renderer {
         for (let k = 0; k < z; k++) {
           const hit = lane?.slots[k];
           const x = k === 0 ? xs[ti] + off(y) : fibreX(L, xs[ti], k, z) + fOff(k, y);
-          ctx.fillStyle = colour;
+          ctx.fillStyle = k === 0 ? colour : zoomColour(z);
           if (hit) {
             ctx.globalAlpha = a;
             ctx.beginPath();
@@ -320,8 +324,11 @@ export class Renderer {
       ctx.fillRect(0, b.y1, L.width, L.height - b.y1);
       ctx.fillRect(0, b.y0, b.x0, b.y1 - b.y0);
       ctx.fillRect(b.x1, b.y0, L.width - b.x1, b.y1 - b.y0);
-      ctx.globalAlpha = 0.45 * u;
-      ctx.strokeStyle = UI.text;
+      // The frame takes the zoom's colour when the whole region shares one.
+      let fz = p.threads[reg.t0].lanes[ROWS[reg.r0]]?.zoom ?? 1;
+      for (let ti = reg.t0; ti <= reg.t1; ti++) for (let ri = reg.r0; ri <= reg.r1; ri++) if ((p.threads[ti].lanes[ROWS[ri]]?.zoom ?? 1) !== fz) fz = 0;
+      ctx.globalAlpha = 0.6 * u;
+      ctx.strokeStyle = fz > 1 ? zoomColour(fz) : UI.text;
       ctx.lineWidth = 1;
       roundRect(ctx, b.x0 - 0.5, b.y0 - 0.5, b.x1 - b.x0 + 1, b.y1 - b.y0 + 1, 6);
       ctx.stroke();
@@ -386,7 +393,8 @@ export class Renderer {
       for (let ti = reg.t0; ti <= reg.t1; ti++) {
         for (let k = 0; k < fz; k += every) {
           ctx.font = `${k === 0 ? 600 : 400} 11px ${FONT}`;
-          ctx.fillStyle = k === 0 ? UI.text : UI.dim;
+          ctx.fillStyle = k === 0 ? UI.text : zoomColour(fz);
+          ctx.globalAlpha = L.u * (k === 0 ? 1 : 0.75);
           ctx.fillText(String((ti - reg.t0) * fz + k + 1), fibreX(L, xs[ti], k, fz), ny);
         }
       }

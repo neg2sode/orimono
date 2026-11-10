@@ -3,7 +3,7 @@ import '@fontsource/space-grotesk/500.css';
 import '@fontsource/space-grotesk/600.css';
 import './style.css';
 
-import { BPM_MAX, BPM_MIN, DEFAULT_VELOCITY, MAX_ZOOM, ROWS, threadSeconds, type RowTag } from './constants';
+import { BPM_MAX, BPM_MIN, DEFAULT_VELOCITY, MAX_ZOOM, ROWS, threadSeconds, zoomColour, type RowTag } from './constants';
 import { Engine, type RowMix } from './audio';
 import { History } from './history';
 import { LABEL_W, computeLayout, dropIndex, hitTest, inNumberLane, touchStripTarget, type Layout, type Target } from './layout';
@@ -294,6 +294,7 @@ function updateLevel() {
   if (fibre) {
     const z = regionFactor(fibre.region);
     $('fib-n').textContent = z ? times(z) : '×…';
+    $('fib-n').style.color = z ? zoomColour(z) : '';
     $('zoom-pop').hidden = true;
     $<HTMLButtonElement>('fib-less').disabled = (z ?? 2) <= 1;
     $<HTMLButtonElement>('fib-more').disabled = (z ?? 2) >= MAX_ZOOM;
@@ -333,6 +334,7 @@ function updateLevel() {
     for (let m = 1; m <= MAX_ZOOM; m++) {
       const lost = zoomPlan(pattern(), r, m, true).lost;
       const b = button(times(m), () => { pop.hidden = true; void setFactor(m); });
+      if (m > 1) b.style.boxShadow = `inset 0 -3px 0 ${zoomColour(m)}`; // each zoom's own colour
       if (m === now) b.classList.add('on');
       else if (has && lost) { b.classList.add('lossy'); anyLoss = true; }
       else if (has) b.classList.add('keeps');

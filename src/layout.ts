@@ -108,7 +108,8 @@ export const cellR = (L: Layout, i: number) => L.xs[i] + L.colW - L.pad;
 
 /** The box around an area of cells. */
 export function regionBox(L: Layout, r: Rect) {
-  return { x0: cellL(L, r.t0), x1: cellR(L, r.t1), y0: L.top + r.r0 * L.rowH, y1: L.top + (r.r1 + 1) * L.rowH };
+  // On the right it runs up to the next string, so the last fibres of any zoom are inside.
+  return { x0: cellL(L, r.t0), x1: Math.max(cellR(L, r.t1), L.xs[r.t1] + L.colW - 3), y0: L.top + r.r0 * L.rowH, y1: L.top + (r.r1 + 1) * L.rowH };
 }
 
 /** Where fibre k of a ×z cell is drawn, given its string's x: at its true moment. */
