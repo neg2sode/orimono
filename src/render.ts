@@ -185,13 +185,7 @@ export class Renderer {
         // true moment, carrying seed beads (smaller, so twelve fit in a column).
         // Among the threads a bead's size is its loudness, zoomed or not. Inside a region the
         // beads shrink to fit between the fibres.
-        // A zoomed stretch of a row is one colour: the colour of its first thread, even where it
-        // runs on into other groups. The thread's own string and its note on the beat keep
-        // their group's colour. (Worked out from the pattern each time, so cutting a stretch in
-        // two gives each part its own first colour.)
-        let first = ti;
-        while (z > 1 && first > 0 && (p.threads[first - 1].lanes[row]?.zoom ?? 1) === z) first--;
-        const zc = first === ti ? colour : colourOf(first);
+        const zc = colour; // a zoomed cell keeps its own group's colour
         const fit = Math.max(1.8, Math.min(rMax * 0.62, (L.colW / z) * 0.42));
         const seedR = z > 1 ? rMax + (fit - rMax) * (inReg(ti, ri) ? u : 0) : rMax;
         // A fibre is one fine string running through every neighbouring row with the same
