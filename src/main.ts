@@ -99,15 +99,40 @@ engine
 
 // ---------------------------------------------------------------- panel
 
+// Inside a region the tempo knob becomes a listening speed: it reads the rate of the fibres
+// (72 BPM in a ×3 region reads 216) and turning it changes only how fast Play runs in there.
+// The pattern's own tempo is untouched. While the whole pattern is looping, the knob is the
+// pattern's tempo as usual.
+let localBpm: number | null = null; // the listening tempo inside the region, in thread terms
+const listening = () => !!fibre && zoomGoal === 1 && !scheduler.looping;
+function tempoScale() {
+  if (!listening() || !fibre) return 1;
+  const r = fibre.region;
+  let z = 1;
+  for (let ti = r.t0; ti <= r.t1; ti++) for (let ri = r.r0; ri <= r.r1; ri++) z = Math.max(z, zoomOf(pattern(), ti, ROWS[ri]));
+  return z;
+}
+const tempoReading = () => Math.round((listening() ? localBpm ?? pattern().bpm : pattern().bpm) * tempoScale() * 10) / 10;
+function setTempo(reading: number) {
+  if (listening()) { localBpm = reading / tempoScale(); updatePanel(); }
+  else history.apply(setBpm(pattern(), reading));
+}
+scheduler.bpm = () => (fibre && zoomGoal === 1 && !scheduler.looping ? localBpm : null);
+
 function updatePanel() {
   const p = pattern();
-  $('bpm').textContent = p.bpm.toFixed(p.bpm % 1 ? 1 : 0);
+  const shown = tempoReading(), real = shown / tempoScale();
+  $('bpm').textContent = shown.toFixed(shown % 1 ? 1 : 0);
+  document.querySelector('.tempo')!.classList.toggle('local', listening());
+  $('knob').title = listening()
+    ? 'Listening speed in here, counted in fibres. It does not change the tempo outside.'
+    : 'Tempo: drag up/down, scroll or arrow keys (whole BPM). Double-click to type an exact value, like 72.5.';
   $('len').textContent = `${p.threads.length} thread${p.threads.length === 1 ? '' : 's'}`;
   $('secs').textContent = `${(p.threads.length * threadSeconds(p.bpm)).toFixed(2)} s`;
   $<HTMLButtonElement>('undo').disabled = !history.canUndo;
   $<HTMLButtonElement>('redo').disabled = !history.canRedo;
   // Knob: 10–300 BPM over a 270° sweep, on a log scale.
-  const t = Math.log(p.bpm / BPM_MIN) / Math.log(BPM_MAX / BPM_MIN);
+  const t = Math.log(real / BPM_MIN) / Math.log(BPM_MAX / BPM_MIN);
   const ang = -135 + 270 * t;
   $('knob-tick').setAttribute('transform', `rotate(${ang} 24 24)`);
   $('knob-arc').setAttribute('d', arc(24, 24, 19, -135, ang));
@@ -120,6 +145,7 @@ function arc(cx: number, cy: number, r: number, a0: number, a1: number) {
 }
 
 function showPlaying() {
+  updatePanel(); // whether the knob is the tempo or the listening speed depends on what is playing
   const b = $<HTMLButtonElement>('play');
   b.textContent = scheduler.playing ? 'Stop' : 'Play';
   b.classList.toggle('playing', scheduler.playing);
@@ -249,6 +275,7 @@ function enterFibre(r: Rect) {
   stage.scrollTo(0, 0);
   fibre = { region: { ...r }, ids: next.threads.slice(r.t0, r.t1 + 1).map((t) => t.id) };
   zoomGoal = 1;
+  localBpm = null; // every visit starts at true speed
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) zoomU = 1;
   updateLevel();
 }
@@ -289,6 +316,7 @@ async function setFactor(m: number) {
 /** Toolbar state that depends on the level. */
 function updateLevel() {
   const inside = !!fibre && zoomGoal === 1;
+  updatePanel();
   $('fibre-count').hidden = !inside;
   $<HTMLButtonElement>('tool-select').disabled = inside;
   if (fibre) {
@@ -399,19 +427,19 @@ $('sounds').onclick = () => $<HTMLDialogElement>('credits').showModal();
 {
   const knob = $('knob');
   const LOG_PER_PX = 0.0045; // change in ln(BPM) per pixel dragged
-  const clampBpm = (b: number) => Math.max(BPM_MIN, Math.min(BPM_MAX, b));
+  const clampBpm = (b: number) => Math.max(BPM_MIN * tempoScale(), Math.min(BPM_MAX * tempoScale(), b));
   const toBpm = (u: number) => clampBpm(Math.round(Math.exp(u)));
   let startY = 0, startU = 0;
   knob.addEventListener('pointerdown', (e) => {
     knob.setPointerCapture(e.pointerId);
     startY = e.clientY;
-    startU = Math.log(pattern().bpm);
+    startU = Math.log(tempoReading());
     history.begin();
   });
   knob.addEventListener('pointermove', (e) => {
     if (!knob.hasPointerCapture(e.pointerId)) return;
     const next = toBpm(startU + (startY - e.clientY) * LOG_PER_PX * (e.shiftKey ? 0.25 : 1));
-    if (next !== pattern().bpm) history.apply(setBpm(pattern(), next));
+    if (next !== tempoReading()) setTempo(next);
   });
   const done = () => { history.end(); updatePanel(); };
   knob.addEventListener('pointerup', done);
@@ -420,14 +448,14 @@ $('sounds').onclick = () => $<HTMLDialogElement>('credits').showModal();
   let wheelTimer = 0, wheelU = 0, wheeling = false;
   knob.addEventListener('wheel', (e) => {
     e.preventDefault();
-    if (!wheeling) { history.begin(); wheeling = true; wheelU = Math.log(pattern().bpm); }
+    if (!wheeling) { history.begin(); wheeling = true; wheelU = Math.log(tempoReading()); }
     const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
     const notch = Math.abs(px) >= 50; // a mouse wheel click
-    const cur = pattern().bpm;
+    const cur = tempoReading();
     if (notch) wheelU = Math.log(Math.round(cur) - Math.sign(px));
     else wheelU -= px * LOG_PER_PX * 0.5;
     const next = toBpm(wheelU);
-    if (next !== cur) history.apply(setBpm(pattern(), next));
+    if (next !== cur) setTempo(next);
     window.clearTimeout(wheelTimer);
     wheelTimer = window.setTimeout(() => { wheeling = false; done(); }, 400);
   }, { passive: false });
@@ -436,12 +464,12 @@ $('sounds').onclick = () => $<HTMLDialogElement>('credits').showModal();
     if (!step) return;
     e.preventDefault();
     e.stopPropagation();
-    const b = pattern().bpm;
-    history.apply(setBpm(pattern(), clampBpm(step > 0 ? Math.floor(b) + 1 : Math.ceil(b) - 1)));
+    const b = tempoReading();
+    setTempo(clampBpm(step > 0 ? Math.floor(b) + 1 : Math.ceil(b) - 1));
   });
   const input = $<HTMLInputElement>('bpm-input');
   const openInput = () => {
-    input.value = String(pattern().bpm);
+    input.value = String(tempoReading());
     input.hidden = false;
     input.focus();
     input.select();
@@ -450,11 +478,11 @@ $('sounds').onclick = () => $<HTMLDialogElement>('credits').showModal();
   $('bpm').addEventListener('dblclick', openInput);
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') input.blur();
-    if (e.key === 'Escape') { input.value = String(pattern().bpm); input.blur(); }
+    if (e.key === 'Escape') { input.value = String(tempoReading()); input.blur(); }
   });
   input.addEventListener('blur', () => {
     const v = parseFloat(input.value);
-    if (!Number.isNaN(v)) history.apply(setBpm(pattern(), clampBpm(v)));
+    if (!Number.isNaN(v)) setTempo(clampBpm(v));
     input.hidden = true;
   });
 }
@@ -538,7 +566,7 @@ function showActions() {
           : button(`✂ split after ${ti + 1}`, () => keep(split(p, ti + 1), ti))]
         : []),
     );
-    place(L.xs[ti], L.numTop - 60);
+    place(L.xs[ti] + L.colW / 2 - L.pad, L.numTop - 60);
   } else if (view.rowSel) {
     // Row actions: a fader per selected row, with mute and solo.
     actions.classList.add('mix');
@@ -911,7 +939,7 @@ function frame() {
   layout = computeLayout(p, stage.clientWidth, stage.clientHeight, stripAnchor?.colW ?? touchColW ?? undefined,
     fibre ? { region: fibre.region, u: ease(zoomU) } : undefined);
   if (stripAnchor && !gesture) view.hover = hitTest(layout, p, stripAnchor.x, stripAnchor.y);
-  const cell = threadSeconds(p.bpm);
+  const cell = threadSeconds(scheduler.bpm?.() ?? p.bpm);
   for (const f of scheduler.due()) {
     if (f.start) view.playheadId = f.threadId;
     // A note sets its string swinging: the thread's string for a note on the beat, and the

@@ -36,6 +36,11 @@ export class Scheduler {
   private rows: readonly RowTag[] = ROWS;
   /** Called when a play-once stretch has finished. */
   onEnd: (() => void) | null = null;
+  /** A tempo to play at instead of the pattern's own (for listening slowly inside a region). */
+  bpm: (() => number | null) | null = null;
+  /** Looping the whole pattern (not playing a stretch once). */
+  get looping() { return this.playing && this.lastId === null; }
+  private tempo(p: Pattern) { return this.bpm?.() ?? p.bpm; }
 
   constructor(private engine: Engine, private pattern: () => Pattern) {}
 
@@ -67,7 +72,7 @@ export class Scheduler {
     const p = this.pattern();
     const now = this.engine.ctx.currentTime;
     // If audio fell far behind (tab was asleep), jump forward rather than play a burst.
-    if (this.threadTime + this.booked * threadSeconds(p.bpm) < now - 0.2) {
+    if (this.threadTime + this.booked * threadSeconds(this.tempo(p)) < now - 0.2) {
       this.threadTime = now + 0.02;
       this.booked = 0;
     }
@@ -89,7 +94,7 @@ export class Scheduler {
         this.id = p.threads[this.idx].id;
       }
       const thread = p.threads[this.idx];
-      const dur = threadSeconds(p.bpm);
+      const dur = threadSeconds(this.tempo(p));
       // Book the part of this thread, as a fraction, that falls inside the lookahead window.
       const upTo = Math.min(1, (horizon - this.threadTime) / dur);
       if (upTo <= this.booked) break;

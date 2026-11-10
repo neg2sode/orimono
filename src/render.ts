@@ -395,7 +395,7 @@ export class Renderer {
       ctx.globalAlpha = 1;
     }
     for (let ti = 0; ti < n; ti++) {
-      const x = xs[ti];
+      const x = xs[ti] + L.colW / 2 - L.pad; // a thread's number sits under the middle of its cell
       if (reg) {
         const inside = ti >= reg.t0 && ti <= reg.t1;
         ctx.globalAlpha = inside ? (fz > 1 ? 1 - L.u : 1) : 1 - 0.65 * L.u;

@@ -47,6 +47,9 @@ button.ghost { border-color: transparent; color: var(--dim); }
 .bpm { display: flex; align-items: baseline; gap: 4px; min-width: 74px; }
 .bpm span { font-size: 24px; font-weight: 600; }
 .bpm small { color: var(--secondary); font-size: 11px; }
+.tempo.local .bpm span { color: var(--caramel); }
+.tempo.local .bpm small::after { content: ' in fibres'; }
+.tempo.local .knob-body { stroke: var(--caramel); }
 #bpm-input {
   position: absolute; left: 52px; width: 80px; font: inherit; font-size: 18px; color: var(--text);
   background: var(--bg); border: 1px solid var(--secondary); border-radius: 4px; padding: 2px 6px;
