@@ -43,21 +43,6 @@ export const MIN_THREADS = 1;
 export const MAX_THREADS = 128;
 export const DEFAULT_VELOCITY = 0.75;
 export const MAX_ZOOM = 12; // most fibres one thread can split into
-
-/**
- * Each zoom has its own colour, brighter than any group dye so a region stands out from the
- * threads. The hue follows what the number is made of: twos are green (2, 4, 8 drift towards
- * teal), threes yellow (9 a deeper gold), 5 orange-red, 7 red-magenta, 11 violet. Mixed numbers
- * sit between their parts: 6 and 12 yellow-green, 10 orange.
- */
-export const ZOOM_COLOURS: Record<number, string> = {
-  2: '#6EDC7F', 4: '#46D39A', 8: '#2FC7B5',
-  3: '#F4DA3A', 9: '#EDB422',
-  6: '#B9DE3F', 12: '#8FDB55',
-  5: '#FF7448', 10: '#FF9F3D',
-  7: '#F0508E', 11: '#B07CF2',
-};
-export const zoomColour = (z: number) => ZOOM_COLOURS[z] ?? '#FFFAD8';
 export const BPM_MIN = 10;
 export const BPM_MAX = 300;
 export const DEFAULT_BPM = 72;

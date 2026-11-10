@@ -2,7 +2,7 @@
 // size is their velocity, and strings wobble when the playhead plucks them.
 
 import { LABEL_W, cellL, cellR, fibreX, gapX, regionBox, rowY, type Layout, type Target } from './layout';
-import { PALETTE, ROWS, UI, zoomColour } from './constants';
+import { PALETTE, ROWS, UI } from './constants';
 import type { Pattern, Rect } from './model';
 
 export interface ViewState {
@@ -185,6 +185,13 @@ export class Renderer {
         // true moment, carrying seed beads (smaller, so twelve fit in a column).
         // Among the threads a bead's size is its loudness, zoomed or not. Inside a region the
         // beads shrink to fit between the fibres.
+        // A zoomed stretch of a row is one colour: the colour of its first thread, even where it
+        // runs on into other groups. The thread's own string and its note on the beat keep
+        // their group's colour. (Worked out from the pattern each time, so cutting a stretch in
+        // two gives each part its own first colour.)
+        let first = ti;
+        while (z > 1 && first > 0 && (p.threads[first - 1].lanes[row]?.zoom ?? 1) === z) first--;
+        const zc = first === ti ? colour : colourOf(first);
         const fit = Math.max(1.8, Math.min(rMax * 0.62, (L.colW / z) * 0.42));
         const seedR = z > 1 ? rMax + (fit - rMax) * (inReg(ti, ri) ? u : 0) : rMax;
         // A fibre is one fine string running through every neighbouring row with the same
@@ -214,14 +221,11 @@ export class Renderer {
           // A zoomed cell is a place to go into: a soft patch of its colour marks it. Inside,
           // its fibres stand as full strings.
           const inside = inReg(ti, ri) ? u : 0;
-          // The patch, the fibres and the notes between the beats take the zoom's own colour;
-          // the thread's string and the note on the beat keep the group's.
-          const zc = zoomColour(z);
           const nextPlain = (p.threads[ti + 1]?.lanes[row]?.zoom ?? 1) === 1;
-          ctx.globalAlpha = a * 0.13;
+          ctx.globalAlpha = a * 0.1;
           ctx.fillStyle = zc;
           ctx.fillRect(xs[ti] - L.pad, y - L.rowH / 2 + 1.5, L.colW + (nextPlain ? Math.max(0, L.pad - 3) : 0), L.rowH - 3);
-          ctx.globalAlpha = a * (0.5 + 0.25 * inside);
+          ctx.globalAlpha = a * (0.38 + 0.22 * inside);
           ctx.strokeStyle = zc;
           ctx.lineWidth = 1;
           ctx.beginPath();
@@ -243,7 +247,7 @@ export class Renderer {
         for (let k = 0; k < z; k++) {
           const hit = lane?.slots[k];
           const x = k === 0 ? xs[ti] + off(y) : fibreX(L, xs[ti], k, z) + fOff(k, y);
-          ctx.fillStyle = k === 0 ? colour : zoomColour(z);
+          ctx.fillStyle = k === 0 ? colour : zc;
           if (hit) {
             ctx.globalAlpha = a;
             ctx.beginPath();
@@ -324,11 +328,8 @@ export class Renderer {
       ctx.fillRect(0, b.y1, L.width, L.height - b.y1);
       ctx.fillRect(0, b.y0, b.x0, b.y1 - b.y0);
       ctx.fillRect(b.x1, b.y0, L.width - b.x1, b.y1 - b.y0);
-      // The frame takes the zoom's colour when the whole region shares one.
-      let fz = p.threads[reg.t0].lanes[ROWS[reg.r0]]?.zoom ?? 1;
-      for (let ti = reg.t0; ti <= reg.t1; ti++) for (let ri = reg.r0; ri <= reg.r1; ri++) if ((p.threads[ti].lanes[ROWS[ri]]?.zoom ?? 1) !== fz) fz = 0;
-      ctx.globalAlpha = 0.6 * u;
-      ctx.strokeStyle = fz > 1 ? zoomColour(fz) : UI.text;
+      ctx.globalAlpha = 0.45 * u;
+      ctx.strokeStyle = UI.text;
       ctx.lineWidth = 1;
       roundRect(ctx, b.x0 - 0.5, b.y0 - 0.5, b.x1 - b.x0 + 1, b.y1 - b.y0 + 1, 6);
       ctx.stroke();
@@ -393,8 +394,7 @@ export class Renderer {
       for (let ti = reg.t0; ti <= reg.t1; ti++) {
         for (let k = 0; k < fz; k += every) {
           ctx.font = `${k === 0 ? 600 : 400} 11px ${FONT}`;
-          ctx.fillStyle = k === 0 ? UI.text : zoomColour(fz);
-          ctx.globalAlpha = L.u * (k === 0 ? 1 : 0.75);
+          ctx.fillStyle = k === 0 ? UI.text : UI.dim;
           ctx.fillText(String((ti - reg.t0) * fz + k + 1), fibreX(L, xs[ti], k, fz), ny);
         }
       }
