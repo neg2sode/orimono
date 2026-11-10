@@ -3,7 +3,7 @@ import { PALETTE } from './constants';
 import {
   clearRect, copyRect, deleteCell, deleteGroups, duplicateGroups, fresh, getHit, insertAfter, insertBack, insertFront, setBpm,
   isBoundary, merge, mergeGroups, moveGroups, pasteClip, recolour, runs, setHit, split, type Pattern,
-  clearRect as clearCells, zoomOf, zoomPlan, zoomRect,
+  clearRect as clearCells, notesBetween, regionAt, splitPlain, zoomOf, zoomPlan, zoomRect,
 } from './model';
 import { colourDistance } from './colour';
 
@@ -253,5 +253,31 @@ describe('zoom: threads into fibres (§8.2, scenario 10)', () => {
     let p = zoomRect(fresh(), cell, 3);
     p = clearCells(setHit(p, 0, 'BD', { v: 0.5 }, 2), cell);
     expect(kick(p)).toEqual({ zoom: 3, slots: [null, null, null] });
+  });
+
+  it('an exact change makes ×6 into ×3, keeping every other note', () => {
+    let p = zoomRect(fresh(), cell, 6);
+    p = setHit(setHit(p, 0, 'BD', { v: 1 }, 2), 0, 'BD', { v: 0.5 }, 3);
+    expect(zoomPlan(p, cell, 3, true)).toEqual({ changed: 1, lost: 1, from: [6] });
+    expect(kick(zoomRect(p, cell, 3, true))).toEqual({ zoom: 3, slots: [null, { v: 1 }, null] });
+  });
+
+  it('opening a region splits plain cells and leaves zoomed ones as they are', () => {
+    const area = { t0: 0, t1: 1, r0: 16, r1: 16 };
+    let p = setHit(zoomRect(fresh(), cell, 3), 1, 'BD', { v: 1 });
+    p = splitPlain(p, area, 2);
+    expect([zoomOf(p, 0, 'BD'), zoomOf(p, 1, 'BD')]).toEqual([3, 2]);
+    expect(p.threads[1].lanes.BD).toEqual({ zoom: 2, slots: [{ v: 1 }, null] });
+    expect(splitPlain(p, area, 4)).toBe(p);
+  });
+
+  it('a region is found from any of its cells, and notes between the beats are counted', () => {
+    let p = zoomRect(fresh(), { t0: 2, t1: 4, r0: 14, r1: 15 }, 3);
+    p = zoomRect(p, { t0: 5, t1: 5, r0: 15, r1: 15 }, 4);
+    expect(regionAt(p, 3, 15)).toEqual({ t0: 2, t1: 4, r0: 14, r1: 15 });
+    expect(regionAt(p, 5, 15)).toEqual({ t0: 5, t1: 5, r0: 15, r1: 15 });
+    expect(regionAt(p, 0, 0)).toBeNull();
+    p = setHit(setHit(p, 2, 'SD', { v: 1 }, 0), 3, 'SD', { v: 1 }, 2);
+    expect(notesBetween(p, { t0: 2, t1: 4, r0: 14, r1: 15 })).toBe(1);
   });
 });

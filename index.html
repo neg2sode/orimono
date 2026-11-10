@@ -18,27 +18,26 @@
           </svg>
         </div>
         <div class="bpm"><span id="bpm">72</span><small>BPM</small></div>
-        <input id="bpm-input" type="number" min="40" max="300" step="0.1" hidden />
+        <input id="bpm-input" type="number" min="10" max="300" step="0.1" hidden />
       </div>
       <div class="random-wrap">
         <button id="random" class="primary" title="Random: fill your groups (or the selection) with a beat. Your own notes stay. Shift-click: same style again">Random</button>
         <span id="style-tag" aria-live="polite"></span>
       </div>
       <div class="zoom-wrap">
-        <div class="zoom" role="group" aria-label="Zoom: fibres, threads, fabric">
-          <button id="zoom-fibre" title="Fibres: split the selected cells into finer steps (keys 2–9; 1 removes)" aria-label="Fibres">
-            <svg viewBox="0 0 36 28" aria-hidden="true">
-              <path d="M36 14 C24 14 16 4 2 3 M36 14 C24 14 16 9 2 8.5 M36 14 H2 M36 14 C24 14 16 19 2 19.5 M36 14 C24 14 16 24 2 25" />
-            </svg>
-          </button>
-          <span class="zoom-thread" title="Threads: where you are">
-            <svg viewBox="0 0 24 28" aria-hidden="true"><path d="M0 14 H24" /><circle cx="12" cy="14" r="3.2" /></svg>
-          </span>
-          <button id="zoom-fabric" title="Fabric: the whole pattern at a glance" aria-label="Fabric">
-            <svg viewBox="0 0 36 28" aria-hidden="true">
-              <path d="M0 14 H34 M8 7 H34 M8 21 H34 M13 3 V25 M21 3 V25 M29 3 V25" />
-            </svg>
-          </button>
+        <button id="zoom" class="zoom" aria-label="Zoom">
+          <svg class="z-fibre" viewBox="0 0 36 28" aria-hidden="true">
+            <path d="M36 14 C24 14 16 4 2 3 M36 14 C24 14 16 9 2 8.5 M36 14 H2 M36 14 C24 14 16 19 2 19.5 M36 14 C24 14 16 24 2 25" />
+          </svg>
+          <svg class="z-thread" viewBox="0 0 24 28" aria-hidden="true"><path d="M0 14 H24" /><circle cx="12" cy="14" r="3.2" /></svg>
+          <svg class="z-fabric" viewBox="0 0 36 28" aria-hidden="true">
+            <path d="M0 14 H34 M8 7 H34 M8 21 H34 M13 3 V25 M21 3 V25 M29 3 V25" />
+          </svg>
+        </button>
+        <div id="fibre-count" class="seg" role="group" aria-label="Fibres per thread" hidden>
+          <button id="fib-less" title="Fewer fibres per thread">–</button>
+          <span id="fib-n">×2</span>
+          <button id="fib-more" title="More fibres per thread">+</button>
         </div>
         <div id="zoom-pop" hidden></div>
       </div>

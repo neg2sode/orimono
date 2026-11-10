@@ -43,7 +43,7 @@ export const MIN_THREADS = 1;
 export const MAX_THREADS = 128;
 export const DEFAULT_VELOCITY = 0.75;
 export const MAX_ZOOM = 12; // most fibres one thread can split into
-export const BPM_MIN = 40;
+export const BPM_MIN = 10;
 export const BPM_MAX = 300;
 export const DEFAULT_BPM = 72;
 

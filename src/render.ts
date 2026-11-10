@@ -1,7 +1,7 @@
 // Drawing (§11): each thread is a vertical string in its group's colour, hits are beads whose
 // size is their velocity, and strings wobble when the playhead plucks them.
 
-import { LABEL_W, fibreX, gapX, rowY, type Layout, type Target } from './layout';
+import { LABEL_W, fibreX, gapX, regionBox, rowY, type Layout, type Target } from './layout';
 import { PALETTE, ROWS, UI } from './constants';
 import type { Pattern, Rect } from './model';
 
@@ -23,6 +23,8 @@ export interface ViewState {
   glow: number;
   /** The area Random filled on that press (null = everything): only notes inside it glow. */
   glowRect: Rect | null;
+  /** Thread level: the zoomed region under the pointer (a press goes inside it). */
+  hoverRegion?: Rect | null;
 }
 
 interface Wobble { amp: number; t0: number; freq: number; tau: number }
@@ -83,7 +85,7 @@ export class Renderer {
     const still = reducedMotion();
 
     // Springy positions: strings slide to their places when cells are added, removed or moved.
-    const k = still ? 1 : 1 - Math.exp(-dt * 16);
+    const k = still || L.u > 0 ? 1 : 1 - Math.exp(-dt * 16); // the dive moves strings itself
     const xs = p.threads.map((t, i) => {
       const target = L.xs[i];
       let x = this.xNow.get(t.id);
@@ -114,27 +116,24 @@ export class Renderer {
       ctx.globalAlpha = 1;
     });
 
-    // Row guides and label tags.
-    ctx.font = `600 10px ${FONT}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ROWS.forEach((tag, ri) => {
+    // Everything in the matrix stays between the row tags and the number strip (it can reach
+    // past them when the view is inside a region).
+    const reg = L.region, u = L.u;
+    const inReg = (ti: number, ri: number) => !!reg && ti >= reg.t0 && ti <= reg.t1 && ri >= reg.r0 && ri <= reg.r1;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(u > 0 ? LABEL_W - 8 : 0, 0, L.width, u > 0 ? L.numTop - 2 : L.height);
+    ctx.clip();
+
+    // Row guides.
+    ROWS.forEach((_, ri) => {
       const y = rowY(L, ri);
       ctx.strokeStyle = 'rgba(105,117,127,0.13)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(LABEL_W - 6, Math.round(y) + 0.5);
+      ctx.moveTo(Math.max(LABEL_W - 6, xs[0] - L.colW / 2 - 6), Math.round(y) + 0.5);
       ctx.lineTo(xs[xs.length - 1] + L.colW / 2 + L.tail, Math.round(y) + 0.5);
       ctx.stroke();
-      const hot = ((s.hover.kind === 'cell' || s.hover.kind === 'label') && s.hover.ri === ri)
-        || (!!s.rowSel && ri >= s.rowSel[0] && ri <= s.rowSel[1]);
-      roundRect(ctx, 10, y - 8, 30, 16, 3);
-      ctx.globalAlpha = s.quiet?.[ri] ? 0.35 : 1;
-      ctx.fillStyle = hot ? UI.text : UI.tag;
-      ctx.fill();
-      ctx.fillStyle = UI.bg;
-      ctx.fillText(tag, 25, y + 0.5);
-      ctx.globalAlpha = 1;
     });
 
     // Playhead glow.
@@ -142,14 +141,15 @@ export class Renderer {
     if (playIdx >= 0) {
       ctx.fillStyle = colourOf(playIdx);
       ctx.globalAlpha = 0.12;
-      ctx.fillRect(xs[playIdx] - L.colW / 2 + 1, L.top - 6, L.colW - 2, L.bottom - L.top + 12);
+      // Inside a region the glow covers the thread's whole time: from its string to the next.
+      ctx.fillRect(xs[playIdx] - (L.colW / 2) * (1 - u) + 1, L.top - 6, L.colW - 2, L.bottom - L.top + 12);
       ctx.globalAlpha = 1;
     }
 
     // Strings and beads.
     const span = L.bottom - L.top + 16;
     const y0 = L.top - 8;
-    const rMax = Math.max(3, Math.min(15, Math.min(L.colW, L.rowH) * 0.42));
+    const rMax = Math.max(3, Math.min(15 + 9 * u, Math.min(L.colW, L.rowH) * 0.42));
     // After a Random press, the user's own notes (which Random kept) glow and fade out.
     const glow = Math.max(0, 1 - (nowMs - s.glow) / 900);
     p.threads.forEach((t, ti) => {
@@ -164,7 +164,7 @@ export class Renderer {
       };
       ctx.globalAlpha = a * (ti === playIdx ? 1 : 0.85);
       ctx.strokeStyle = colour;
-      ctx.lineWidth = L.colW >= 22 ? 2 : 1.5;
+      ctx.lineWidth = (L.colW >= 22 ? 2 : 1.5) + (reg && ti >= reg.t0 && ti <= reg.t1 ? u : 0);
       ctx.beginPath();
       const steps = 24;
       for (let k2 = 0; k2 <= steps; k2++) {
@@ -184,11 +184,18 @@ export class Renderer {
         // true moment, carrying seed beads (smaller, so twelve fit in a column).
         const seedR = z > 1 ? Math.max(1.8, Math.min(rMax * 0.62, (L.colW / z) * 0.42)) : rMax;
         if (z > 1) {
-          ctx.globalAlpha = a * 0.38;
+          // A zoomed cell is a place to go into: a soft patch of its colour marks it. Inside,
+          // its fibres stand as full strings.
+          const inside = inReg(ti, ri) ? u : 0;
+          const pad = Math.min(L.colW / 2, Math.max(10, L.colW / 16));
+          ctx.globalAlpha = a * 0.1;
+          ctx.fillStyle = colour;
+          ctx.fillRect(xs[ti] - pad, y - L.rowH / 2 + 1.5, L.colW, L.rowH - 3);
+          ctx.globalAlpha = a * (0.38 + 0.22 * inside);
           ctx.strokeStyle = colour;
           ctx.lineWidth = 1;
           ctx.beginPath();
-          const h = L.rowH * 0.3;
+          const h = L.rowH * (0.3 + 0.2 * inside);
           for (let k = 1; k < z; k++) {
             const fx = Math.round(fibreX(L, xs[ti], k, z)) + 0.5;
             ctx.moveTo(fx, y - h);
@@ -228,8 +235,19 @@ export class Renderer {
     });
     for (const [key, t0] of this.pops) if (nowMs - t0 > 600) this.pops.delete(key);
 
+    // Thread level: the zoomed region under the pointer lights up (a press goes inside).
+    if (s.hoverRegion && !reg) {
+      const b = regionBox(L, s.hoverRegion);
+      ctx.strokeStyle = UI.text;
+      ctx.globalAlpha = 0.7;
+      ctx.lineWidth = 1.5;
+      roundRect(ctx, b.x0 + 0.5, b.y0 + 1.5, b.x1 - b.x0 - 1, b.y1 - b.y0 - 3, 5);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
     // Hover ring on the cell under the pointer (Draw tool).
-    if (s.hover.kind === 'cell' && !s.hold) {
+    if (s.hover.kind === 'cell' && !s.hold && !s.hoverRegion) {
       const hz = p.threads[s.hover.ti]?.lanes[ROWS[s.hover.ri]]?.zoom ?? 1;
       const x = fibreX(L, xs[s.hover.ti], s.hover.slot, hz), y = rowY(L, s.hover.ri);
       ctx.strokeStyle = UI.text;
@@ -255,6 +273,51 @@ export class Renderer {
       ctx.setLineDash([]);
     }
 
+    // Inside a region: the threads around it fall into shadow, and a frame marks the region.
+    if (reg) {
+      const b = regionBox(L, reg);
+      ctx.fillStyle = UI.bg;
+      ctx.globalAlpha = 0.68 * u;
+      ctx.fillRect(0, 0, L.width, b.y0);
+      ctx.fillRect(0, b.y1, L.width, L.height - b.y1);
+      ctx.fillRect(0, b.y0, b.x0, b.y1 - b.y0);
+      ctx.fillRect(b.x1, b.y0, L.width - b.x1, b.y1 - b.y0);
+      ctx.globalAlpha = 0.45 * u;
+      ctx.strokeStyle = UI.text;
+      ctx.lineWidth = 1;
+      roundRect(ctx, b.x0 - 0.5, b.y0 - 0.5, b.x1 - b.x0 + 1, b.y1 - b.y0 + 1, 6);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+
+    // Row tags, in their own column on the left.
+    if (u > 0) {
+      ctx.fillStyle = UI.bg;
+      ctx.fillRect(0, 0, LABEL_W - 8, L.numTop - 2);
+    }
+    ctx.font = `600 10px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ROWS.forEach((tag, ri) => {
+      const y = rowY(L, ri);
+      if (y > L.numTop - 10 && u > 0) return;
+      const hot = ((s.hover.kind === 'cell' || s.hover.kind === 'label') && s.hover.ri === ri)
+        || (!!s.rowSel && ri >= s.rowSel[0] && ri <= s.rowSel[1]);
+      const away = reg && (ri < reg.r0 || ri > reg.r1) ? 1 - 0.7 * u : 1;
+      roundRect(ctx, 10, y - 8, 30, 16, 3);
+      ctx.globalAlpha = (s.quiet?.[ri] ? 0.35 : 1) * away;
+      ctx.fillStyle = hot ? UI.text : UI.tag;
+      ctx.fill();
+      ctx.fillStyle = UI.bg;
+      ctx.fillText(tag, 25, y + 0.5);
+      ctx.globalAlpha = 1;
+    });
+
+    if (u > 0) {
+      ctx.fillStyle = UI.bg;
+      ctx.fillRect(0, L.numTop - 2, L.width, L.height - L.numTop + 2);
+    }
     this.drawStrip(p, L, s, xs);
   }
 
@@ -304,6 +367,7 @@ export class Renderer {
 
     // New-group "+" at both ends: always visible, brighter on hover.
     for (const end of ['front', 'back'] as const) {
+      if (L.u > 0) break; // groups aren't changed from inside a region
       const hot = h.kind === end;
       const x = end === 'front' ? xa - 10 : xb + 10;
       ctx.fillStyle = hot ? UI.play : UI.border;

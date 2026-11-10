@@ -9,7 +9,8 @@ import { History } from './history';
 import { LABEL_W, computeLayout, dropIndex, hitTest, inNumberLane, touchStripTarget, type Layout, type Target } from './layout';
 import {
   clearRect, copyRect, deleteCell, deleteGroups, duplicateGroups, fresh, getHit, insertAfter, insertFront,
-  insertBack, isBoundary, merge, mergeGroups, moveGroups, parse, pasteClip, recolour, runs, setBpm, setHit, split, zoomOf, zoomPlan, zoomRect, type Clip, type Pattern, type Rect,
+  insertBack, isBoundary, merge, mergeGroups, moveGroups, notesBetween, parse, pasteClip, recolour, regionAt, runs, setBpm, setHit, split, splitPlain, zoomOf, zoomPlan, zoomRect,
+  type Clip, type Pattern, type Rect,
 } from './model';
 import { STYLES, randomFillStyled } from './random';
 import { Renderer, type ViewState } from './render';
@@ -71,7 +72,16 @@ let shiftHeld = false;
 // After a "+" / "–" click, column widths hold still until the pointer moves, so the same number
 // stays under the pointer and can be clicked again and again.
 let stripAnchor: { x: number; y: number; colW: number } | null = null;
-const selecting = () => view.tool === 'select' || shiftHeld;
+const selecting = () => !fibre && (view.tool === 'select' || shiftHeld);
+
+// Fibre level: the view is inside one zoomed region (a rectangle of cells split into fibres).
+// Notes are drawn on threads at thread level and on fibres in here, never across.
+let fibre: { region: Rect; ids: number[]; opened: Pattern | null } | null = null;
+let zoomU = 0, zoomGoal = 0; // how far in the view is, and where it is heading (0 threads, 1 fibres)
+let lastFactor = 2; // fibres per thread for a newly opened region
+const DIVE_MS = 560;
+const diving = () => zoomU !== zoomGoal;
+const ease = (u: number) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
 
 // ---------------------------------------------------------------- loading
 
@@ -96,7 +106,7 @@ function updatePanel() {
   $('secs').textContent = `${(p.threads.length * threadSeconds(p.bpm)).toFixed(2)} s`;
   $<HTMLButtonElement>('undo').disabled = !history.canUndo;
   $<HTMLButtonElement>('redo').disabled = !history.canRedo;
-  // Knob: 40–300 BPM over a 270° sweep, on a log scale (72 sits a little before ten o'clock).
+  // Knob: 10–300 BPM over a 270° sweep, on a log scale.
   const t = Math.log(p.bpm / BPM_MIN) / Math.log(BPM_MAX / BPM_MIN);
   const ang = -135 + 270 * t;
   $('knob-tick').setAttribute('transform', `rotate(${ang} 24 24)`);
@@ -170,7 +180,11 @@ $('random').onclick = (e) => {
   engine.resume();
   const others = STYLES.map((_, i) => i).filter((i) => i !== lastStyle).sort(() => Math.random() - 0.5);
   const order = e.shiftKey && lastStyle >= 0 ? [lastStyle, ...others] : [...others, ...(lastStyle >= 0 ? [lastStyle] : [])];
-  const { pattern: next, style } = randomFillStyled(pattern(), selRect(), Math.random, order);
+  // One level at a time: inside a region Random fills its fibres; at thread level it fills
+  // threads and leaves zoomed cells alone.
+  const area = fibre ? fibre.region : selRect();
+  if (!fibre && area && allZoomed(area)) return;
+  const { pattern: next, style } = randomFillStyled(pattern(), area, Math.random, order);
   history.apply(next);
   if (style < 0) return;
   lastStyle = style;
@@ -180,7 +194,7 @@ $('random').onclick = (e) => {
   window.clearTimeout(styleTimer);
   styleTimer = window.setTimeout(() => tag.classList.remove('show'), 2200);
   view.glow = performance.now(); // your own notes glow briefly: Random kept them
-  view.glowRect = selRect();
+  view.glowRect = area;
 };
 $('clear').onclick = doClearRect;
 
@@ -198,71 +212,115 @@ function ask(text: string, yes: string): Promise<boolean> {
 
 const times = (n: number) => `×${n}`;
 
-/** Split the selected cells into m fibres each (1 removes the zoom). Asks only if notes would go. */
-async function doZoom(m: number) {
-  const r = selRect();
-  if (!r) return;
-  const plan = zoomPlan(pattern(), r, m);
-  if (!plan.changed) return;
+function allZoomed(r: Rect) {
+  for (let ti = r.t0; ti <= r.t1; ti++) for (let ri = r.r0; ri <= r.r1; ri++) if (zoomOf(pattern(), ti, ROWS[ri]) === 1) return false;
+  return true;
+}
+
+/** The zoom of the region, if all its cells share one. */
+function regionFactor(r: Rect): number | null {
+  const z = zoomOf(pattern(), r.t0, ROWS[r.r0]);
+  for (let ti = r.t0; ti <= r.t1; ti++) for (let ri = r.r0; ri <= r.r1; ri++) if (zoomOf(pattern(), ti, ROWS[ri]) !== z) return null;
+  return z;
+}
+
+/** Go inside an area. Its plain cells are split into fibres; zoomed cells stay as they are. */
+function enterFibre(r: Rect) {
+  if (fibre || diving()) return;
+  const p = pattern();
+  const zs = new Set<number>();
+  for (let ti = r.t0; ti <= r.t1; ti++) for (let ri = r.r0; ri <= r.r1; ri++) zs.add(zoomOf(p, ti, ROWS[ri]));
+  zs.delete(1);
+  const next = splitPlain(p, r, zs.size === 1 ? [...zs][0] : lastFactor);
+  history.apply(next);
+  clearSelection();
+  view.hover = { kind: 'none' };
+  view.hoverRegion = null;
+  stage.scrollTo(0, 0);
+  fibre = { region: { ...r }, ids: next.threads.slice(r.t0, r.t1 + 1).map((t) => t.id), opened: next !== p ? next : null };
+  zoomGoal = 1;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) zoomU = 1;
+  updateLevel();
+}
+
+/** Back out to the threads. A region with nothing between the beats goes back to plain cells. */
+function leaveFibre() {
+  if (!fibre || zoomGoal === 0) return;
+  const f = fibre;
+  zoomGoal = 0;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { zoomU = 0; fibre = null; }
+  if (history.current === f.opened) history.retract(); // opened and left untouched: as if never opened
+  else if (notesBetween(pattern(), f.region) === 0) history.apply(zoomRect(pattern(), f.region, 1));
+  view.hover = { kind: 'none' };
+  updateLevel();
+}
+
+/** Inside a region: change how many fibres each of its threads has (1 = none: back to plain cells). */
+async function setFactor(m: number) {
+  if (!fibre || diving() || m < 1 || m > MAX_ZOOM) return;
+  const r = fibre.region;
+  const plan = zoomPlan(pattern(), r, m, true);
   if (plan.lost) {
     const notes = `${plan.lost} note${plan.lost === 1 ? '' : 's'} between the beats will be cleared.`;
     const from = plan.from.map(times).join(' and ');
-    const ok = await ask(m === 1 ? `Remove the ${from} zoom here? ${notes}` : `Change ${from} to ${times(m)} here? ${notes}`, m === 1 ? 'Remove zoom' : `Change to ${times(m)}`);
-    if (!ok) return;
+    const ok = await ask(m === 1 ? `Remove the fibres here? ${notes}` : `Change ${from} to ${times(m)} here? ${notes}`, m === 1 ? 'Remove fibres' : `Change to ${times(m)}`);
+    if (!ok || !fibre) return;
   }
-  history.apply(zoomRect(pattern(), r, m));
-  showActions();
+  if (m === 1) {
+    zoomGoal = 0; // leaving, so the region no longer has to be zoomed
+    history.apply(zoomRect(pattern(), r, 1, true));
+    updateLevel();
+    return;
+  }
+  lastFactor = m;
+  history.apply(zoomRect(pattern(), r, m, true));
+  updateLevel();
+}
+
+/** Toolbar state that depends on the level. */
+function updateLevel() {
+  const inside = !!fibre && zoomGoal === 1;
+  $('fibre-count').hidden = !inside;
+  $<HTMLButtonElement>('tool-select').disabled = inside;
+  if (fibre) {
+    const z = regionFactor(fibre.region);
+    $('fib-n').textContent = z ? times(z) : '×…';
+    $<HTMLButtonElement>('fib-less').disabled = (z ?? 2) <= 1;
+    $<HTMLButtonElement>('fib-more').disabled = (z ?? 2) >= MAX_ZOOM;
+  }
+  $('clear').title = inside
+    ? 'Clear the notes in this region. (Undoable)'
+    : 'Clear notes in the selection, or all notes if nothing is selected. Groups stay. (Undoable)';
 }
 
 {
   const pop = $('zoom-pop');
-  const close = () => { pop.hidden = true; };
-  const open = (build: () => void) => {
-    const was = pop.dataset.for;
-    const wasOpen = !pop.hidden;
-    pop.replaceChildren();
-    build();
-    pop.hidden = wasOpen && was === pop.dataset.for;
+  const stepBase = () => {
+    if (!fibre) return 2;
+    let z = 1;
+    const r = fibre.region;
+    for (let ti = r.t0; ti <= r.t1; ti++) for (let ri = r.r0; ri <= r.r1; ri++) z = Math.max(z, zoomOf(pattern(), ti, ROWS[ri]));
+    return z;
   };
-  const note = (text: string) => {
-    const el = document.createElement('p');
-    el.textContent = text;
-    pop.append(el);
-  };
-  $('zoom-fibre').onclick = (e) => {
+  $('fib-less').onclick = () => void setFactor(stepBase() - 1);
+  $('fib-more').onclick = () => void setFactor(stepBase() + 1);
+  // One button, one way at a time: in to fibres with a selection, out to fabric without one,
+  // and back to the threads from either.
+  $('zoom').onclick = (e) => {
     e.stopPropagation();
-    open(() => {
-      pop.dataset.for = 'fibre';
-      const r = selRect();
-      if (!r) return note('Fibres: pick some cells with Select first, then split each of them into finer steps here.');
-      // The zoom the selection has now, if it is the same everywhere.
-      let now: number | null = zoomOf(pattern(), r.t0, ROWS[r.r0]);
-      for (let ti = r.t0; ti <= r.t1; ti++) for (let ri = r.r0; ri <= r.r1; ri++) if (zoomOf(pattern(), ti, ROWS[ri]) !== now) now = null;
-      note('Split each selected cell into');
-      const grid = document.createElement('div');
-      grid.className = 'zoom-grid';
-      for (let m = 1; m <= MAX_ZOOM; m++) {
-        const b = button(times(m), () => { close(); void doZoom(m); });
-        if (m === now) b.classList.add('on');
-        b.title = m === 1 ? 'No fibres: back to plain threads' : `${m} fibres per thread`;
-        grid.append(b);
-      }
-      pop.append(grid);
-    });
-  };
-  $('zoom-fabric').onclick = (e) => {
-    e.stopPropagation();
-    open(() => {
-      pop.dataset.for = 'fabric';
-      note('Fabric: the whole pattern at a glance. Coming next.');
-    });
+    if (diving()) return;
+    if (fibre) return leaveFibre();
+    const r = selRect();
+    if (r) return enterFibre(r);
+    pop.textContent = 'Fabric: the whole pattern at a glance. Coming next.';
+    pop.hidden = !pop.hidden;
   };
   document.addEventListener('pointerdown', (e) => {
-    if (!pop.hidden && !(e.target as HTMLElement).closest('.zoom-wrap')) close();
+    if (!pop.hidden && !(e.target as HTMLElement).closest('.zoom-wrap')) pop.hidden = true;
   });
 }
-$('undo').onclick = () => { history.undo(); clearSelection(); };
-$('redo').onclick = () => { history.redo(); clearSelection(); };
+$('undo').onclick = () => { history.undo(); clearSelection(); updateLevel(); };
+$('redo').onclick = () => { history.redo(); clearSelection(); updateLevel(); };
 $('tool-draw').onclick = () => setTool('draw');
 $('tool-select').onclick = () => setTool('select');
 $('sounds').onclick = () => $<HTMLDialogElement>('credits').showModal();
@@ -493,8 +551,11 @@ function doDeleteGroups() {
 }
 /** Clear notes in the selection, or everywhere if nothing is selected. Groups stay. */
 function doClearRect() {
-  const all = { t0: 0, t1: pattern().threads.length - 1, r0: 0, r1: ROWS.length - 1 };
-  history.apply(clearRect(pattern(), selRect() ?? all));
+  // Inside a region: its notes go, its fibres stay.
+  if (fibre) return history.apply(clearRect(pattern(), fibre.region));
+  // At thread level everything in the area goes, and emptied regions become plain cells again.
+  const area = selRect() ?? { t0: 0, t1: pattern().threads.length - 1, r0: 0, r1: ROWS.length - 1 };
+  history.apply(zoomRect(clearRect(pattern(), area), area, 1));
 }
 function doCopy() {
   const r = selRect();
@@ -512,6 +573,7 @@ type Gesture =
   | { kind: 'draw'; mode: 'fill' | 'erase'; x0: number; y0: number; last: string; timer: number; ti: number; ri: number; slot: number; before: number | null }
   | { kind: 'pluck'; ti: number; ri: number; slot: number; x0: number; v0: number }
   | { kind: 'rect'; ti: number; ri: number }
+  | { kind: 'tap-in'; region: Rect }
   | { kind: 'band-select'; anchor: number }
   | { kind: 'row-select'; anchor: number }
   | { kind: 'band-move'; a: number; b: number; x0: number; moved: boolean; run: number }
@@ -535,6 +597,7 @@ function preview(row: RowTag, v: number) {
 
 function paint(ti: number, ri: number, slot: number, mode: 'fill' | 'erase') {
   const row = ROWS[ri];
+  if (!fibre && zoomOf(pattern(), ti, row) > 1) return; // a swipe over threads passes over regions
   const has = !!getHit(pattern(), ti, row, slot);
   if (mode === 'fill' && !has) {
     history.apply(setHit(pattern(), ti, row, { v: DEFAULT_VELOCITY, mine: true }, slot));
@@ -547,12 +610,14 @@ function paint(ti: number, ri: number, slot: number, mode: 'fill' | 'erase') {
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 canvas.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0) return;
+  if (e.button !== 0 || diving()) return;
   engine.resume();
   const { x, y } = point(e);
   const t = hitTest(layout, pattern(), x, y);
   canvas.setPointerCapture(e.pointerId);
   lastPointer = e.pointerType;
+
+  if (t.kind === 'out') return leaveFibre();
 
   if (t.kind === 'label') {
     if (!selecting()) { clearSelection(); preview(ROWS[t.ri], DEFAULT_VELOCITY); return; }
@@ -575,6 +640,11 @@ canvas.addEventListener('pointerdown', (e) => {
       return;
     }
     clearSelection();
+    if (!fibre && zoomOf(pattern(), t.ti, ROWS[t.ri]) > 1) {
+      // A zoomed region isn't drawn on from out here: a press goes inside.
+      gesture = { kind: 'tap-in', region: regionAt(pattern(), t.ti, t.ri)! };
+      return;
+    }
     history.begin();
     const row = ROWS[t.ri];
     const before = getHit(pattern(), t.ti, row, t.slot)?.v ?? null;
@@ -609,7 +679,7 @@ canvas.addEventListener('pointerdown', (e) => {
     return;
   }
 
-  if (e.pointerType === 'touch' && inNumberLane(layout, y)) {
+  if (!fibre && e.pointerType === 'touch' && inNumberLane(layout, y)) {
     const tt = touchStripTarget(layout, x);
     if (tt.kind === 'num') {
       const again = view.stripSel === tt.ti;
@@ -644,8 +714,10 @@ canvas.addEventListener('pointermove', (e) => {
   else if (stripAnchor) stripAnchor.y = y;
   const t = hitTest(layout, pattern(), x, y);
   if (!gesture) {
-    view.hover = selecting() && t.kind === 'cell' ? { kind: 'none' } : t;
-    canvas.style.cursor = t.kind === 'none' ? 'default' : t.kind === 'label' ? 'pointer' : t.kind === 'band' && selecting() ? 'grab' : t.kind === 'band' ? 'copy' : 'pointer';
+    const into = !fibre && !selecting() && t.kind === 'cell' && zoomOf(pattern(), t.ti, ROWS[t.ri]) > 1;
+    view.hoverRegion = into && t.kind === 'cell' ? regionAt(pattern(), t.ti, t.ri) : null;
+    view.hover = diving() || (selecting() && t.kind === 'cell') ? { kind: 'none' } : t;
+    canvas.style.cursor = into ? 'zoom-in' : t.kind === 'out' ? 'zoom-out' : t.kind === 'none' ? 'default' : t.kind === 'label' ? 'pointer' : t.kind === 'band' && selecting() ? 'grab' : t.kind === 'band' ? 'copy' : 'pointer';
     return;
   }
   const g = gesture;
@@ -703,6 +775,9 @@ function endGesture(e: PointerEvent) {
   if (g.kind === 'draw') {
     window.clearTimeout(g.timer);
     history.end();
+  } else if (g.kind === 'tap-in') {
+    const t = hitTest(layout, pattern(), x, y), r = g.region;
+    if (t.kind === 'cell' && t.ti >= r.t0 && t.ti <= r.t1 && t.ri >= r.r0 && t.ri <= r.r1) enterFibre(r);
   } else if (g.kind === 'pluck') {
     const hit = getHit(pattern(), g.ti, ROWS[g.ri], g.slot);
     const v = hit?.v ?? g.v0;
@@ -737,7 +812,7 @@ function endGesture(e: PointerEvent) {
 }
 canvas.addEventListener('pointerup', endGesture);
 canvas.addEventListener('pointercancel', endGesture);
-canvas.addEventListener('pointerleave', () => { stripAnchor = null; if (!gesture) view.hover = { kind: 'none' }; });
+canvas.addEventListener('pointerleave', () => { stripAnchor = null; view.hoverRegion = null; if (!gesture) view.hover = { kind: 'none' }; });
 
 // ---------------------------------------------------------------- keyboard
 
@@ -749,21 +824,22 @@ window.addEventListener('keydown', (e) => {
   if ($<HTMLDialogElement>('credits').open || $<HTMLDialogElement>('ask').open) return;
   const mod = e.metaKey || e.ctrlKey;
   if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
-  else if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? history.redo() : history.undo(); clearSelection(); }
+  else if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? history.redo() : history.undo(); clearSelection(); updateLevel(); }
   else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); doDuplicate(); }
-  else if (mod && e.key.toLowerCase() === 'c') { doCopy(); }
-  else if (mod && e.key.toLowerCase() === 'v') { doPaste(); }
+  else if (mod && e.key.toLowerCase() === 'c') { if (!fibre) doCopy(); }
+  else if (mod && e.key.toLowerCase() === 'v') { if (!fibre) doPaste(); }
   else if (mod) return;
   else if (e.key === 'Delete' || e.key === 'Backspace') {
     e.preventDefault();
     if (view.groupSel) doDeleteGroups();
     else if (selRect()) doClearRect(); // the key never clears everything; the Clear button can
   }
-  else if (/^[1-9]$/.test(e.key) && selRect()) void doZoom(Number(e.key)); // 1 removes the zoom
+  else if (/^[1-9]$/.test(e.key) && fibre) void setFactor(Number(e.key)); // inside a region: fibres per thread (1 = none)
+  else if (e.key === 'Enter' && !fibre && selRect()) enterFibre(selRect()!);
   else if (e.key.toLowerCase() === 'd') setTool('draw');
-  else if (e.key.toLowerCase() === 's') setTool('select');
+  else if (e.key.toLowerCase() === 's') { if (!fibre) setTool('select'); }
   else if (e.key.toLowerCase() === 'm') doMergeGroups();
-  else if (e.key === 'Escape') clearSelection();
+  else if (e.key === 'Escape') { if (fibre) leaveFibre(); else clearSelection(); }
 });
 window.addEventListener('keyup', (e) => { if (e.key === 'Shift') shiftHeld = false; });
 window.addEventListener('blur', () => (shiftHeld = false));
@@ -774,9 +850,24 @@ window.addEventListener('blur', () => (shiftHeld = false));
 // Measured in cells, so faster tempos give shorter wobbles and the grid never looks all-a-shimmer.
 const SWING_CELLS: Partial<Record<RowTag, number>> = { BD: 1.6, FT: 1.4, HT: 1.2, DB: 1.1, CG: 1.1, BG: 1.0, SD: 1.0 };
 
+let lastFrame = performance.now();
 function frame() {
   const p = pattern();
-  layout = computeLayout(p, stage.clientWidth, stage.clientHeight, stripAnchor?.colW ?? touchColW ?? undefined);
+  const nowMs = performance.now(), dt = Math.min(100, nowMs - lastFrame);
+  lastFrame = nowMs;
+  if (fibre) {
+    // Undo or redo can take the region away from under the view: then the view is back outside.
+    const r = fibre.region;
+    const there = fibre.ids.every((id, i) => p.threads[r.t0 + i]?.id === id);
+    if (!there || (zoomGoal === 1 && !allZoomed(r))) { fibre = null; zoomU = zoomGoal = 0; updateLevel(); }
+  }
+  if (zoomU !== zoomGoal) {
+    const step = dt / DIVE_MS;
+    zoomU = zoomGoal > zoomU ? Math.min(1, zoomU + step) : Math.max(0, zoomU - step);
+    if (zoomU === 0) fibre = null;
+  }
+  layout = computeLayout(p, stage.clientWidth, stage.clientHeight, stripAnchor?.colW ?? touchColW ?? undefined,
+    fibre ? { region: fibre.region, u: ease(zoomU) } : undefined);
   if (stripAnchor && !gesture) view.hover = hitTest(layout, p, stripAnchor.x, stripAnchor.y);
   const cell = threadSeconds(p.bpm);
   for (const f of scheduler.due()) {
@@ -792,9 +883,18 @@ function frame() {
     }
   }
   // The zoom diagram hints where you can go: into fibres with a selection, out to fabric without.
-  const hasSel = !!selRect();
-  $('zoom-fibre').classList.toggle('lit', hasSel);
-  $('zoom-fabric').classList.toggle('lit', !hasSel);
+  // The zoom button shows where you are (bright) and where a press goes (glowing).
+  const hasSel = !!selRect(), inside = !!fibre && zoomGoal === 1;
+  const part = (cls: string, here: boolean, go: boolean, breathe = false) => {
+    const el = document.querySelector(`#zoom .${cls}`)!;
+    el.classList.toggle('here', here);
+    el.classList.toggle('go', go);
+    el.classList.toggle('breathe', breathe);
+  };
+  part('z-fibre', inside, !inside && hasSel, !inside && hasSel);
+  part('z-thread', !inside, inside);
+  part('z-fabric', false, !inside && !hasSel);
+  $('zoom').title = inside ? 'Back to the threads (Esc)' : hasSel ? 'Go inside the selection: split it into fibres (Enter)' : 'Fabric: the whole pattern at a glance';
   const anySolo = ROWS.some((t) => mix[t]?.solo);
   const quiet = ROWS.map((t) => !!mix[t]?.mute || (anySolo && !mix[t]?.solo));
   renderer.draw(p, layout, { ...view, rect: selRect(), quiet });

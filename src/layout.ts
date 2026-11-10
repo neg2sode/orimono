@@ -1,7 +1,7 @@
 // Screen geometry: where every string, row and number sits, and what is under the pointer.
 
 import { ROWS } from './constants';
-import { isBoundary, runs, zoomOf, type Pattern, type Run } from './model';
+import { isBoundary, runs, zoomOf, type Pattern, type Rect, type Run } from './model';
 
 export const LABEL_W = 60;
 const PAD_R = 28;
@@ -30,10 +30,18 @@ export interface Layout {
   labelEvery: number;
   /** Extra width after the last column, when the last thread's fibres reach past it. */
   tail: number;
+  /** Fibre level: the part of the pattern being looked into, and how far in the view is
+   *  (0 = thread level, 1 = fully inside; in between while the view dives in or out). */
+  region: Rect | null;
+  u: number;
 }
 
+/** The view diving into a region: u runs 0 → 1 (already eased). */
+export interface Camera { region: Rect; u: number }
+const PEEK = 52; // inside a region, this much of the threads around it stays in view
+
 /** frozenColW: keep this column width (while + / – is clicked repeatedly in one place). */
-export function computeLayout(p: Pattern, viewW: number, viewH: number, frozenColW?: number): Layout {
+export function computeLayout(p: Pattern, viewW: number, viewH: number, frozenColW?: number, cam?: Camera): Layout {
   const n = p.threads.length;
   const rs = runs(p);
   let sameGaps = 0;
@@ -42,26 +50,64 @@ export function computeLayout(p: Pattern, viewW: number, viewH: number, frozenCo
   // Fill the window: columns and rows stretch (within limits that keep beads in proportion).
   // A zoomed thread's fibres sit after its string, so a zoomed last thread needs room on the right.
   const tailCols = Object.values(p.threads[n - 1].lanes).some((l) => l.zoom > 1) ? 0.5 : 0;
-  const colW = frozenColW ?? Math.max(12, Math.min(140, avail / (n + tailCols)));
-  const rowH = Math.max(18, Math.min(56, (viewH - TOP - STRIP_H - 12) / ROWS.length));
-  const xs: number[] = [];
-  let x = LABEL_W + colW / 2;
-  rs.forEach((r, ri) => {
-    if (ri > 0 && r.colour === rs[ri - 1].colour) x += SAME_COLOUR_GAP;
-    for (let i = r.start; i < r.end; i++) {
-      xs.push(x);
-      x += colW;
-    }
-  });
-  const bottom = TOP + rowH * ROWS.length;
-  const numTop = bottom + 8;
-  const tail = tailCols * colW;
-  const width = Math.max(viewW, x - colW / 2 + tail + PAD_R);
-  return {
-    width, height: Math.max(viewH, numTop + STRIP_H), rowH, colW, top: TOP, bottom, numTop,
-    bandTop: numTop + NUM_H + BAND_GAP, bandH: BAND_H, numH: NUM_H, xs, runs: rs,
-    labelEvery: colW >= 18 ? 1 : colW >= 10 ? 2 : 4, tail,
+  let colW = frozenColW ?? Math.max(12, Math.min(140, avail / (n + tailCols)));
+  let rowH = Math.max(18, Math.min(56, (viewH - TOP - STRIP_H - 12) / ROWS.length));
+  const place = (w: number) => {
+    const out: number[] = [];
+    let x = LABEL_W + w / 2;
+    rs.forEach((r, ri) => {
+      if (ri > 0 && r.colour === rs[ri - 1].colour) x += SAME_COLOUR_GAP;
+      for (let i = r.start; i < r.end; i++) {
+        out.push(x);
+        x += w;
+      }
+    });
+    return out;
   };
+  let xs = place(colW);
+  let top = TOP;
+  let numTop = TOP + rowH * ROWS.length + 8;
+  let width = Math.max(viewW, xs[n - 1] + colW / 2 + tailCols * colW + PAD_R);
+  let height = Math.max(viewH, numTop + STRIP_H);
+
+  // Diving into a region: the same picture, magnified until the region fills the window. Its box
+  // slides and grows from where it sits among the threads to the middle of the window.
+  const r = cam && cam.u > 0 && cam.region.t1 < n ? cam.region : null;
+  if (r && cam) {
+    const u = cam.u, mix = (a: number, b: number) => a + (b - a) * u;
+    const nT = r.t1 - r.t0 + 1, nR = r.r1 - r.r0 + 1;
+    const gaps = rs.filter((g, i) => i > 0 && g.start > r.t0 && g.start <= r.t1 && g.colour === rs[i - 1].colour).length * SAME_COLOUR_GAP;
+    const areaX = LABEL_W + PEEK, areaW = Math.max(120, viewW - PEEK - areaX);
+    const areaY = PEEK * 0.8, areaH = Math.max(80, viewH - STRIP_H - 8 - PEEK * 0.8 - areaY);
+    const colIn = Math.max(colW, Math.min(480, (areaW - gaps) / nT));
+    const rowIn = Math.max(rowH, Math.min(110, areaH / nR));
+    const x0 = mix(xs[r.t0], areaX + (areaW - nT * colIn - gaps) / 2 + regionPad(colIn));
+    const y0 = mix(TOP + r.r0 * rowH, areaY + (areaH - nR * rowIn) / 2);
+    colW = mix(colW, colIn);
+    rowH = mix(rowH, rowIn);
+    xs = place(colW);
+    const shift = x0 - xs[r.t0];
+    xs = xs.map((x) => x + shift);
+    top = y0 - r.r0 * rowH;
+    numTop = mix(numTop, viewH - STRIP_H);
+    width = viewW;
+    height = viewH;
+  }
+  return {
+    width, height, rowH, colW, top, bottom: top + rowH * ROWS.length, numTop,
+    bandTop: numTop + NUM_H + BAND_GAP, bandH: BAND_H, numH: NUM_H, xs, runs: rs,
+    labelEvery: colW >= 18 ? 1 : colW >= 10 ? 2 : 4, tail: tailCols * colW,
+    region: r, u: r && cam ? cam.u : 0,
+  };
+}
+
+const regionPad = (colW: number) => Math.min(colW / 2, Math.max(10, colW / 16));
+
+/** The box around a zoomed region. Fibres sit after their strings (true time), so the box
+ *  starts just before the first string and ends just before the string after the last. */
+export function regionBox(L: Layout, r: Rect) {
+  const g = regionPad(L.colW);
+  return { x0: L.xs[r.t0] - g, x1: L.xs[r.t1] + L.colW - g, y0: L.top + r.r0 * L.rowH, y1: L.top + (r.r1 + 1) * L.rowH };
 }
 
 /** Where fibre k of a ×z cell is drawn, given its string's x: at its true moment. */
@@ -98,28 +144,40 @@ export type Target =
   | { kind: 'merge'; g: number }
   | { kind: 'band'; run: number }
   | { kind: 'label'; ri: number } // a row's name tag
+  | { kind: 'out' } // fibre level: anywhere outside the region
   | { kind: 'none' };
 
 export function hitTest(L: Layout, p: Pattern, x: number, y: number): Target {
   const n = L.xs.length;
-  if (y >= L.top && y < L.bottom) {
-    if (x < LABEL_W - 8) return { kind: 'label', ri: Math.floor((y - L.top) / L.rowH) };
+  if (L.region) {
+    // Fibre level: notes go on the fibres of the region; anywhere else leads back out.
+    const r = L.region, b = regionBox(L, r);
+    if (y >= L.numTop - 4) return { kind: 'none' };
     const ri = Math.floor((y - L.top) / L.rowH);
-    const col = threadAtX(L, x);
-    // The nearest note position: a string, or one of a zoomed thread's fibres, which sit after
-    // its string at their true moments (fibre k of z is k/z of a column to the right).
-    let near = 0;
-    L.xs.forEach((cx, i) => { if (Math.abs(x - cx) < Math.abs(x - L.xs[near])) near = i; });
-    let best: { ti: number; slot: number } | null = null, bestD = Infinity;
-    for (let ti = Math.max(0, near - 1); ti <= Math.min(n - 1, near + 1); ti++) {
+    if (ri < r.r0 || ri > r.r1) return { kind: 'out' };
+    if (x < LABEL_W - 8) return { kind: 'label', ri };
+    if (x < b.x0 || x > b.x1) return { kind: 'out' };
+    let best = { ti: r.t0, slot: 0 }, bestD = Infinity;
+    for (let ti = r.t0; ti <= r.t1; ti++) {
       const z = zoomOf(p, ti, ROWS[ri]);
       for (let k = 0; k < z; k++) {
         const d = Math.abs(x - fibreX(L, L.xs[ti], k, z));
         if (d < bestD) { bestD = d; best = { ti, slot: k }; }
       }
     }
-    if (!best || bestD > L.colW / 2 + 5) return { kind: 'none' };
-    return { kind: 'cell', ti: best.ti, ri, slot: best.slot, col: col >= 0 ? col : best.ti };
+    return { kind: 'cell', ti: best.ti, ri, slot: best.slot, col: best.ti };
+  }
+  if (y >= L.top && y < L.bottom) {
+    if (x < LABEL_W - 8) return { kind: 'label', ri: Math.floor((y - L.top) / L.rowH) };
+    const ri = Math.floor((y - L.top) / L.rowH);
+    const col = threadAtX(L, x);
+    if (col < 0) return { kind: 'none' };
+    // A zoomed cell's fibres reach to the right of its string, into the next column. A press
+    // there belongs to the zoomed cell, unless it is close to the next (plain) string.
+    let ti = col;
+    const z = (i: number) => zoomOf(p, i, ROWS[ri]);
+    if (col > 0 && x < L.xs[col] - L.colW * 0.2 && z(col - 1) > 1 && z(col) === 1) ti = col - 1;
+    return { kind: 'cell', ti, ri, slot: 0, col };
   }
   if (y >= L.numTop && y < L.numTop + L.numH) {
     // Gaps get a zone either side of the boundary; numbers get the rest.

@@ -219,10 +219,11 @@ export const zoomOf = (p: Pattern, ti: number, row: RowTag) => p.threads[ti]?.la
  *    changes nothing: the finer zoom stays;
  *  - a multiple of the cell's zoom (×2 → ×6) keeps every note;
  *  - anything else (×2 → ×3) keeps the notes that sit exactly on the new fibres.
+ * With `exact`, the cell becomes ×m whatever it was (×6 → ×3 keeps every other note).
  */
-function rezoom(lane: Lane | undefined, m: number): { slots: (Hit | null)[]; lost: number; from: number } | null {
+function rezoom(lane: Lane | undefined, m: number, exact = false): { slots: (Hit | null)[]; lost: number; from: number } | null {
   const z0 = lane?.zoom ?? 1;
-  if (m === z0 || (m !== 1 && z0 % m === 0)) return null;
+  if (m === z0 || (!exact && m !== 1 && z0 % m === 0)) return null;
   const slots: (Hit | null)[] = new Array(m).fill(null);
   let lost = 0;
   lane?.slots.forEach((h, k) => {
@@ -234,12 +235,12 @@ function rezoom(lane: Lane | undefined, m: number): { slots: (Hit | null)[]; los
 }
 
 /** What zooming the area to ×m would do, before doing it (for the "notes will be cleared" question). */
-export function zoomPlan(p: Pattern, r: Rect, m: number): { changed: number; lost: number; from: number[] } {
+export function zoomPlan(p: Pattern, r: Rect, m: number, exact = false): { changed: number; lost: number; from: number[] } {
   let changed = 0, lost = 0;
   const from = new Set<number>();
   for (let ti = r.t0; ti <= r.t1; ti++) {
     for (let ri = r.r0; ri <= r.r1; ri++) {
-      const z = rezoom(p.threads[ti]?.lanes[ROWS[ri]], m);
+      const z = rezoom(p.threads[ti]?.lanes[ROWS[ri]], m, exact);
       if (!z) continue;
       changed++;
       lost += z.lost;
@@ -250,7 +251,7 @@ export function zoomPlan(p: Pattern, r: Rect, m: number): { changed: number; los
 }
 
 /** Split every cell of the area into m fibres (m = 1 removes the zoom). One undo step. */
-export function zoomRect(p: Pattern, r: Rect, m: number): Pattern {
+export function zoomRect(p: Pattern, r: Rect, m: number, exact = false): Pattern {
   if (!Number.isInteger(m) || m < 1 || m > MAX_ZOOM) return p;
   const q = clone(p);
   for (let ti = r.t0; ti <= r.t1; ti++) {
@@ -258,13 +259,53 @@ export function zoomRect(p: Pattern, r: Rect, m: number): Pattern {
     if (!t) continue;
     for (let ri = r.r0; ri <= r.r1; ri++) {
       const row = ROWS[ri];
-      const z = rezoom(t.lanes[row], m);
+      const z = rezoom(t.lanes[row], m, exact);
       if (!z) continue;
       t.lanes[row] = { zoom: m, slots: z.slots };
       pruneLane(t, row);
     }
   }
   return q;
+}
+
+/** Make the area a region: its plain cells become ×m; cells that are already zoomed stay as they are. */
+export function splitPlain(p: Pattern, r: Rect, m: number): Pattern {
+  let any = false;
+  const q = clone(p);
+  for (let ti = r.t0; ti <= r.t1; ti++) {
+    for (let ri = r.r0; ri <= r.r1; ri++) {
+      const t = q.threads[ti], row = ROWS[ri];
+      if (!t || (t.lanes[row]?.zoom ?? 1) > 1) continue;
+      t.lanes[row] = { zoom: m, slots: rezoom(t.lanes[row], m)!.slots };
+      any = true;
+    }
+  }
+  return any ? q : p;
+}
+
+/**
+ * The zoomed region a cell belongs to: from the cell, sideways over neighbours in its row with
+ * the same zoom, then up and down over rows where all those threads have that zoom too.
+ */
+export function regionAt(p: Pattern, ti: number, ri: number): Rect | null {
+  const z = zoomOf(p, ti, ROWS[ri]);
+  if (z === 1) return null;
+  let t0 = ti, t1 = ti, r0 = ri, r1 = ri;
+  while (t0 > 0 && zoomOf(p, t0 - 1, ROWS[ri]) === z) t0--;
+  while (t1 < p.threads.length - 1 && zoomOf(p, t1 + 1, ROWS[ri]) === z) t1++;
+  const whole = (r: number) => { for (let t = t0; t <= t1; t++) if (zoomOf(p, t, ROWS[r]) !== z) return false; return true; };
+  while (r0 > 0 && whole(r0 - 1)) r0--;
+  while (r1 < ROWS.length - 1 && whole(r1 + 1)) r1++;
+  return { t0, t1, r0, r1 };
+}
+
+/** How many notes in the area sit between the beats (on a fibre other than the string itself). */
+export function notesBetween(p: Pattern, r: Rect): number {
+  let n = 0;
+  for (let ti = r.t0; ti <= r.t1; ti++) {
+    for (let ri = r.r0; ri <= r.r1; ri++) p.threads[ti]?.lanes[ROWS[ri]]?.slots.forEach((h, k) => { if (h && k > 0) n++; });
+  }
+  return n;
 }
 
 /** A copied block of lanes: clip[ri][ti]. */
