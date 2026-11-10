@@ -1,7 +1,7 @@
 // Drawing (§11): each thread is a vertical string in its group's colour, hits are beads whose
 // size is their velocity, and strings wobble when the playhead plucks them.
 
-import { LABEL_W, cellL, cellR, fibreX, gapX, regionBox, rowY, type Layout, type Target } from './layout';
+import { LABEL_W, cellL, cellR, fibreX, gapX, midX, regionBox, rowY, type Layout, type Target } from './layout';
 import { PALETTE, ROWS, UI } from './constants';
 import type { Pattern, Rect } from './model';
 
@@ -395,7 +395,7 @@ export class Renderer {
       ctx.globalAlpha = 1;
     }
     for (let ti = 0; ti < n; ti++) {
-      const x = xs[ti] + L.colW / 2 - L.pad; // a thread's number sits under the middle of its cell
+      const x = xs[ti]; // a thread's number sits under its string
       if (reg) {
         const inside = ti >= reg.t0 && ti <= reg.t1;
         ctx.globalAlpha = inside ? (fz > 1 ? 1 - L.u : 1) : 1 - 0.65 * L.u;
@@ -449,12 +449,17 @@ export class Renderer {
 
     // Gap targets: ✂ split, ⋈ merge.
     if (h.kind === 'split' || h.kind === 'merge') {
-      const x = gapX(L, h.g);
+      // The label sits halfway between the two numbers; its line then steps across to where
+      // the groups meet (or would meet), just before the next string.
+      const x = midX(L, h.g), edge = gapX(L, h.g);
       ctx.strokeStyle = h.kind === 'split' ? UI.text : UI.play;
       ctx.lineWidth = 1.5;
+      ctx.lineJoin = 'round';
       ctx.beginPath();
       ctx.moveTo(x, L.numTop + 3);
-      ctx.lineTo(x, L.bandTop + L.bandH + 2);
+      ctx.lineTo(x, L.numTop + L.numH - 9);
+      ctx.lineTo(edge, L.bandTop - 2);
+      ctx.lineTo(edge, L.bandTop + L.bandH + 2);
       ctx.stroke();
       ctx.fillStyle = UI.panel;
       ctx.fillRect(x - 8, ny - 8, 16, 16);

@@ -48,7 +48,7 @@ button.ghost { border-color: transparent; color: var(--dim); }
 .bpm span { font-size: 24px; font-weight: 600; }
 .bpm small { color: var(--secondary); font-size: 11px; }
 .tempo.local .bpm span { color: var(--caramel); }
-.tempo.local .bpm small::after { content: ' in fibres'; }
+.tempo.local .bpm small::before { content: 'playback '; }
 .tempo.local .knob-body { stroke: var(--caramel); }
 #bpm-input {
   position: absolute; left: 52px; width: 80px; font: inherit; font-size: 18px; color: var(--text);
@@ -133,16 +133,19 @@ button:focus:not(:focus-visible) { outline: none; }
 /* Zoom: one button, drawn as fibres running into a thread running into fabric. The bright part
    is where you are; the glowing part is where a press takes you. */
 .zoom-wrap { position: relative; display: flex; gap: 8px; align-items: center; }
-.zoom { display: flex; align-items: center; padding: 2px 6px; gap: 0; color: var(--border); }
-.zoom svg { height: 28px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; color: var(--border); transition: color 0.25s; }
-.zoom .z-fibre, .zoom .z-fabric { width: 36px; }
-.zoom .z-thread { width: 24px; stroke-width: 2; }
-.zoom .z-thread circle { fill: currentColor; stroke: none; }
-.zoom svg.here { color: var(--text); }
-.zoom svg.go { color: var(--caramel); }
-.zoom svg.go.breathe { animation: breathe 1.6s ease-in-out infinite; }
+.zoom { display: flex; align-items: center; padding: 2px 6px; gap: 0; width: 110px; }
+.zoom > * { height: 28px; width: 0; min-width: 0; flex: 1 1 0; color: var(--border); transition: color 0.25s, flex-grow 0.3s, opacity 0.25s; }
+.zoom svg { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
+.zoom svg path { vector-effect: non-scaling-stroke; }
+.zoom .z-thread { position: relative; }
+.zoom .z-thread::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; background: currentColor; }
+.zoom .z-thread::after { content: ''; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: currentColor; }
+.zoom .off { flex-grow: 0; opacity: 0; }
+.zoom .here { color: var(--text); }
+.zoom .go { color: var(--caramel); }
+.zoom .go.breathe { animation: breathe 1.6s ease-in-out infinite; }
 @keyframes breathe { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .zoom svg.go.breathe { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .zoom .go.breathe { animation: none; } .zoom > * { transition: none; } }
 #fibre-count { align-items: center; }
 #fibre-count[hidden] { display: none; }
 #fibre-count #fib-n { min-width: 42px; border-left: none; color: var(--text); }

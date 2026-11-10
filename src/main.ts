@@ -127,8 +127,15 @@ function updatePanel() {
   $('knob').title = listening()
     ? 'Listening speed in here, counted in fibres. It does not change the tempo outside.'
     : 'Tempo: drag up/down, scroll or arrow keys (whole BPM). Double-click to type an exact value, like 72.5.';
-  $('len').textContent = `${p.threads.length} thread${p.threads.length === 1 ? '' : 's'}`;
-  $('secs').textContent = `${(p.threads.length * threadSeconds(p.bpm)).toFixed(2)} s`;
+  if (fibre && zoomGoal === 1) {
+    // Inside a region the readout is about the region: its fibres, and how long Play takes.
+    const r = fibre.region, nT = r.t1 - r.t0 + 1, z = regionFactor(r);
+    $('len').textContent = z ? `${nT * z} fibres` : `${nT} thread${nT === 1 ? '' : 's'}`;
+    $('secs').textContent = `${(nT * threadSeconds(real)).toFixed(2)} s`;
+  } else {
+    $('len').textContent = `${p.threads.length} thread${p.threads.length === 1 ? '' : 's'}`;
+    $('secs').textContent = `${(p.threads.length * threadSeconds(p.bpm)).toFixed(2)} s`;
+  }
   $<HTMLButtonElement>('undo').disabled = !history.canUndo;
   $<HTMLButtonElement>('redo').disabled = !history.canRedo;
   // Knob: 10–300 BPM over a 270° sweep, on a log scale.
@@ -566,7 +573,7 @@ function showActions() {
           : button(`✂ split after ${ti + 1}`, () => keep(split(p, ti + 1), ti))]
         : []),
     );
-    place(L.xs[ti] + L.colW / 2 - L.pad, L.numTop - 60);
+    place(L.xs[ti], L.numTop - 60);
   } else if (view.rowSel) {
     // Row actions: a fader per selected row, with mute and solo.
     actions.classList.add('mix');
@@ -970,9 +977,14 @@ function frame() {
     el.classList.toggle('go', go);
     el.classList.toggle('breathe', breathe);
   };
+  // Only the two levels that matter right now are drawn, stretched to fill the button: fibres
+  // and threads with a selection or inside a region, threads and fabric otherwise. (Fabric
+  // stays dim until it exists.)
   part('z-fibre', inside, !inside && hasSel, !inside && hasSel);
   part('z-thread', !inside, inside);
-  part('z-fabric', false, !inside && !hasSel);
+  part('z-fabric', false, false);
+  document.querySelector('#zoom .z-fibre')!.classList.toggle('off', !inside && !hasSel);
+  document.querySelector('#zoom .z-fabric')!.classList.toggle('off', inside || hasSel);
   $('zoom').title = inside ? 'Back to the threads (Esc)' : hasSel ? 'Go inside the selection: split it into fibres (Enter)' : 'Fabric: the whole pattern at a glance';
   const anySolo = ROWS.some((t) => mix[t]?.solo);
   const quiet = ROWS.map((t) => !!mix[t]?.mute || (anySolo && !mix[t]?.solo));

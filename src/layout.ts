@@ -125,6 +125,15 @@ export function gapX(L: Layout, g: number) {
   return (cellR(L, g - 1) + cellL(L, g)) / 2;
 }
 
+/** Halfway between the strings (and so the numbers) of threads g-1 and g. */
+export const midX = (L: Layout, g: number) => (L.xs[g - 1] + L.xs[g]) / 2;
+
+function nearestString(L: Layout, x: number): number {
+  let best = 0;
+  L.xs.forEach((cx, i) => { if (Math.abs(x - cx) < Math.abs(x - L.xs[best])) best = i; });
+  return best;
+}
+
 /** The thread whose cell holds x (with a few px of slack at the two ends), or -1. */
 function threadAtX(L: Layout, x: number): number {
   const n = L.xs.length;
@@ -180,11 +189,11 @@ export function hitTest(L: Layout, p: Pattern, x: number, y: number): Target {
     const zone = Math.max(4, Math.min(8, L.colW * 0.22));
     if (x < gapX(L, 0) + Math.min(zone, 4)) return x > gapX(L, 0) - 20 ? { kind: 'front' } : { kind: 'none' };
     if (x > gapX(L, n) - Math.min(zone, 4)) return x < gapX(L, n) + 20 ? { kind: 'back' } : { kind: 'none' };
+    // Numbers sit under their strings; ✂ and ⋈ sit halfway between two numbers.
     for (let g = 1; g < n; g++) {
-      if (Math.abs(x - gapX(L, g)) < zone) return isBoundary(p, g) ? { kind: 'merge', g } : { kind: 'split', g };
+      if (Math.abs(x - midX(L, g)) < zone) return isBoundary(p, g) ? { kind: 'merge', g } : { kind: 'split', g };
     }
-    const ti = threadAtX(L, x);
-    if (ti < 0) return { kind: 'none' };
+    const ti = nearestString(L, x);
     return y < L.numTop + L.numH / 2 ? { kind: 'add', ti } : { kind: 'del', ti };
   }
   if (y >= L.bandTop - 3 && y < L.bandTop + L.bandH + 5) {
@@ -199,7 +208,7 @@ export function touchStripTarget(L: Layout, x: number): { kind: 'front' } | { ki
   const n = L.xs.length;
   if (x < gapX(L, 0)) return { kind: 'front' };
   if (x > gapX(L, n)) return { kind: 'back' };
-  return { kind: 'num', ti: Math.max(0, threadAtX(L, x)) };
+  return { kind: 'num', ti: nearestString(L, x) };
 }
 
 export const inNumberLane = (L: Layout, y: number) => y >= L.numTop && y < L.numTop + L.numH;
