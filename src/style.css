@@ -46,11 +46,12 @@ button.ghost { border-color: transparent; color: var(--dim); }
 .knob-arc { fill: none; stroke: var(--caramel); stroke-width: 3; stroke-linecap: round; }
 .knob-tick { stroke: var(--text); stroke-width: 2.5; stroke-linecap: round; }
 .bpm { display: flex; align-items: baseline; gap: 4px; min-width: 74px; }
-.bpm span { font-size: 24px; font-weight: 600; }
+.bpm span { font-size: 24px; font-weight: 600; min-width: 44px; font-variant-numeric: tabular-nums; } /* room for three digits, so the toolbar holds still */
 .bpm small { color: var(--secondary); font-size: 11px; }
 .tempo.local .bpm span { color: var(--caramel); }
-.tempo.local .bpm small::before { content: 'playback'; display: block; }
-.tempo.local .bpm small { line-height: 1.05; }
+/* "playback" hangs above "BPM" without moving anything: the number keeps its place. */
+.bpm small { position: relative; min-width: 44px; }
+.tempo.local .bpm small::before { content: 'playback'; position: absolute; left: 0; bottom: 100%; line-height: 1; }
 .tempo.local .knob-body { stroke: var(--caramel); }
 #bpm-input {
   position: absolute; left: 52px; width: 80px; font: inherit; font-size: 18px; color: var(--text);
