@@ -9,7 +9,7 @@ import { History } from './history';
 import { LABEL_W, computeLayout, dropIndex, hitTest, inNumberLane, touchStripTarget, type Layout, type Target } from './layout';
 import {
   clearRect, copyRect, deleteCell, deleteGroups, duplicateGroups, fresh, getHit, insertAfter, insertFront,
-  insertBack, isBoundary, merge, mergeGroups, moveGroups, notesBetween, parse, pasteClip, recolour, regionAt, runs, setBpm, setHit, split, splitPlain, zoomOf, zoomPlan, zoomRect,
+  insertBack, isBoundary, merge, mergeGroups, moveGroups, notesBetween, parse, pasteClip, recolour, regionAt, runs, setHit, split, splitPlain, zoomOf, zoomPlan, zoomRect,
   type Clip, type Pattern, type Rect,
 } from './model';
 import { STYLES, randomFillStyled } from './random';
@@ -28,22 +28,48 @@ const actions = $<HTMLDivElement>('actions');
 
 // ---------------------------------------------------------------- state
 
-function loadSaved(): Pattern {
-  try {
-    const raw = localStorage.getItem(STORE_KEY) ?? localStorage.getItem(OLD_STORE_KEY);
-    if (raw) return parse(JSON.parse(raw)) ?? fresh();
-  } catch {
-    /* ignore a broken save */
-  }
-  return fresh();
-}
+// A project is a row of fabrics. A fabric is one whole pattern: everything on one thread-level
+// screen. Fabrics follow each other in order (a "paragraph"); one of them is open at a time.
+// Each fabric keeps its own undo history. The tempo belongs to the paragraph.
+const PROJECT_KEY = 'orimono.project.v1';
+interface Item { id: number; history: History }
 
 let saveTimer = 0;
-const history = new History(loadSaved(), () => {
+function saveNow() {
   window.clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(() => localStorage.setItem(STORE_KEY, JSON.stringify(history.current)), 300);
-  updatePanel();
-});
+  const fabrics = items.map((it) => ({ ...it.history.current, bpm: projectBpm }));
+  localStorage.setItem(PROJECT_KEY, JSON.stringify({ v: 1, fabrics, cur, bpm: projectBpm, seen }));
+}
+function save() {
+  window.clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(saveNow, 300);
+}
+window.addEventListener('pagehide', () => { if (items.length) saveNow(); }); // nothing is lost by leaving quickly
+let nextItemId = 1;
+const makeItem = (p: Pattern): Item => ({ id: nextItemId++, history: new History(p, () => { save(); updatePanel(); }) });
+
+let items: Item[] = [];
+let cur = 0; // the open fabric
+let projectBpm = fresh().bpm;
+let seen = false; // has the table of fabrics been visited yet?
+try {
+  const raw = JSON.parse(localStorage.getItem(PROJECT_KEY) ?? 'null');
+  if (raw && Array.isArray(raw.fabrics)) {
+    items = (raw.fabrics as unknown[]).map(parse).filter((p): p is Pattern => !!p).map(makeItem);
+    cur = Math.max(0, Math.min(items.length - 1, raw.cur | 0));
+    if (typeof raw.bpm === 'number') projectBpm = raw.bpm;
+    seen = !!raw.seen;
+  } else {
+    // A save from before fabrics: one pattern, which becomes the first fabric.
+    const old = JSON.parse(localStorage.getItem(STORE_KEY) ?? localStorage.getItem(OLD_STORE_KEY) ?? 'null');
+    const p = old && parse(old);
+    if (p) { items = [makeItem(p)]; projectBpm = p.bpm; }
+  }
+} catch {
+  /* ignore a broken save */
+}
+if (!items.length) items = [makeItem(fresh())];
+let history = items[cur].history;
 const pattern = () => history.current;
 
 const engine = new Engine();
@@ -58,7 +84,9 @@ function setRowMix(tag: RowTag, change: Partial<RowMix>) {
   engine.setMix(mix);
   localStorage.setItem(MIX_KEY, JSON.stringify(mix));
 }
-const scheduler = new Scheduler(engine, pattern);
+// What is playing: usually the open fabric; out on the table, each fabric in turn.
+let playId = items[cur].id;
+const scheduler = new Scheduler(engine, () => items.find((it) => it.id === playId)?.history.current ?? pattern());
 const renderer = new Renderer(canvas);
 
 const view: ViewState = {
@@ -112,12 +140,12 @@ function tempoScale() {
   for (let ti = r.t0; ti <= r.t1; ti++) for (let ri = r.r0; ri <= r.r1; ri++) z = Math.max(z, zoomOf(pattern(), ti, ROWS[ri]));
   return z;
 }
-const tempoReading = () => Math.round((listening() ? localBpm ?? pattern().bpm : pattern().bpm) * tempoScale() * 10) / 10;
+const tempoReading = () => Math.round((listening() ? localBpm ?? projectBpm : projectBpm) * tempoScale() * 10) / 10;
 function setTempo(reading: number) {
   if (listening()) { localBpm = reading / tempoScale(); updatePanel(); }
-  else history.apply(setBpm(pattern(), reading));
+  else { projectBpm = Math.round(reading * 10) / 10; save(); updatePanel(); } // the paragraph's tempo: every fabric plays at it
 }
-scheduler.bpm = () => (fibre && zoomGoal === 1 && !scheduler.looping ? localBpm : null);
+scheduler.bpm = () => (fibre && zoomGoal === 1 && !scheduler.looping ? localBpm : null) ?? projectBpm;
 
 function updatePanel() {
   const p = pattern();
@@ -132,12 +160,18 @@ function updatePanel() {
     const r = fibre.region, nT = r.t1 - r.t0 + 1, z = regionFactor(r);
     $('len').textContent = z ? `${nT * z} fibres` : `${nT} thread${nT === 1 ? '' : 's'}`;
     $('secs').textContent = `${(nT * threadSeconds(real)).toFixed(2)} s`;
+  } else if (tableOpen) {
+    // Out on the table the readout is about the whole paragraph.
+    const total = items.reduce((n, it) => n + it.history.current.threads.length, 0);
+    $('len').textContent = `${items.length} fabric${items.length === 1 ? '' : 's'}`;
+    $('secs').textContent = `${(total * threadSeconds(projectBpm)).toFixed(2)} s`;
   } else {
-    $('len').textContent = `${p.threads.length} thread${p.threads.length === 1 ? '' : 's'}`;
-    $('secs').textContent = `${(p.threads.length * threadSeconds(p.bpm)).toFixed(2)} s`;
+    const which = items.length > 1 ? `${cur + 1}/${items.length} · ` : ''; // which fabric this is
+    $('len').textContent = `${which}${p.threads.length} thread${p.threads.length === 1 ? '' : 's'}`;
+    $('secs').textContent = `${(p.threads.length * threadSeconds(projectBpm)).toFixed(2)} s`;
   }
-  $<HTMLButtonElement>('undo').disabled = !history.canUndo;
-  $<HTMLButtonElement>('redo').disabled = !history.canRedo;
+  $<HTMLButtonElement>('undo').disabled = tableOpen || !history.canUndo;
+  $<HTMLButtonElement>('redo').disabled = tableOpen || !history.canRedo;
   // Knob: 10–300 BPM over a 270° sweep, on a log scale.
   const t = Math.log(real / BPM_MIN) / Math.log(BPM_MAX / BPM_MIN);
   const ang = -135 + 270 * t;
@@ -168,10 +202,22 @@ function togglePlay() {
   } else if (fibre && zoomGoal === 1) {
     const r = fibre.region; // inside a region: just the region, once
     scheduler.start({ from: r.t0, to: r.t1, rows: ROWS.slice(r.r0, r.r1 + 1) });
-  } else scheduler.start();
+  } else {
+    // Among the threads the open fabric loops; out on the table the fabrics play in turn,
+    // starting from the picked one, round and round.
+    playId = items[tableOpen ? tableSel : cur].id;
+    scheduler.start();
+  }
   playEnded = 0;
   showPlaying();
+  markPlaying();
 }
+scheduler.onLoop = (time) => {
+  if (!tableOpen || items.length < 2) return;
+  const i = items.findIndex((it) => it.id === playId);
+  playId = items[(i + 1) % items.length].id;
+  window.setTimeout(markPlaying, Math.max(0, (time - engine.ctx.currentTime) * 1000));
+};
 
 function setTool(tool: 'draw' | 'select') {
   view.tool = tool;
@@ -325,7 +371,10 @@ function updateLevel() {
   const inside = !!fibre && zoomGoal === 1;
   updatePanel();
   $('fibre-count').hidden = !inside;
-  $<HTMLButtonElement>('tool-select').disabled = inside;
+  $<HTMLButtonElement>('tool-select').disabled = inside || tableOpen;
+  for (const id of ['tool-draw', 'random', 'clear', 'length']) $<HTMLButtonElement>(id).disabled = tableOpen;
+  $<HTMLButtonElement>('undo').disabled = tableOpen || !history.canUndo;
+  $<HTMLButtonElement>('redo').disabled = tableOpen || !history.canRedo;
   if (fibre) {
     const z = regionFactor(fibre.region);
     $('fib-n').textContent = z ? times(z) : '×…';
@@ -384,17 +433,31 @@ function updateLevel() {
       pop.append(foot);
     }
   };
+  // One button. With a selection, or inside a region, the whole of it goes between threads and
+  // fibres. Otherwise it has two halves: the thread line slides on to the next fabric (once
+  // there is more than one), and the grid zooms out to the table of fabrics.
+  let zoomTouch = false, armed = 0;
+  $('zoom').addEventListener('pointerdown', (e) => { zoomTouch = e.pointerType === 'touch'; });
   $('zoom').onclick = (e) => {
     e.stopPropagation();
-    if (diving()) return;
+    if (diving() || tableBusy) return;
+    if (tableOpen) return closeTable(tableSel);
     if (fibre) return leaveFibre();
     const r = selRect();
     if (r) return enterFibre(r);
-    const wasOpen = !pop.hidden;
-    pop.replaceChildren();
-    pop.dataset.for = 'fabric';
-    pop.textContent = 'Fabric: the whole pattern at a glance. Coming next.';
-    pop.hidden = wasOpen;
+    const box = $('zoom').getBoundingClientRect();
+    if (e.detail === 0 || e.clientX > box.left + box.width / 2) return openTable();
+    if (items.length < 2) return;
+    const line = document.querySelector('#zoom .z-thread')!;
+    if (zoomTouch && !line.classList.contains('armed')) {
+      // Touch has no hover: the first tap shows where this goes, a second tap goes.
+      line.classList.add('armed');
+      window.clearTimeout(armed);
+      armed = window.setTimeout(() => line.classList.remove('armed'), 2600);
+      return;
+    }
+    line.classList.remove('armed');
+    nextFabric();
   };
   document.addEventListener('pointerdown', (e) => {
     if (!pop.hidden && !(e.target as HTMLElement).closest('.zoom-wrap')) pop.hidden = true;
@@ -417,9 +480,7 @@ $('sounds').onclick = () => $<HTMLDialogElement>('credits').showModal();
     if (open) { pop.hidden = false; $('length').classList.add('on'); }
   };
   $('new').onclick = () => {
-    const f = fresh();
-    f.bpm = pattern().bpm;
-    applyStructure(f);
+    applyStructure(fresh());
     close();
   };
   document.addEventListener('pointerdown', (e) => {
@@ -643,6 +704,236 @@ function doPaste() {
   if (r && clip) history.apply(pasteClip(pattern(), clip, r.t0, r.r0));
 }
 
+// ---------------------------------------------------------------- fabrics: the table
+
+const table = $('table'), cards = $('cards');
+let tableOpen = false; // out on the table of fabrics
+let tableBusy = false; // the view is on its way out or back in
+let tableSel = 0; // the picked fabric
+let sliding = false;
+let stageSize = { w: 1200, h: 700 }; // the grid's size when last seen: cards are small pictures of it
+const thumbCanvas = document.createElement('canvas');
+const thumbRenderer = new Renderer(thumbCanvas, true);
+const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const DIVE = { duration: 520, easing: 'cubic-bezier(.65,0,.35,1)' };
+
+/** Open fabric i among the threads. If something is playing, it carries straight on with this fabric. */
+function switchTo(i: number) {
+  cur = Math.max(0, Math.min(items.length - 1, i));
+  history = items[cur].history;
+  clearSelection();
+  renderer.reset();
+  view.playheadId = null;
+  view.hover = { kind: 'none' };
+  view.hoverRegion = null;
+  if (scheduler.playing && playId !== items[cur].id) {
+    scheduler.stop();
+    playId = items[cur].id;
+    scheduler.start();
+  }
+  playId = scheduler.playing ? playId : items[cur].id;
+  updateLevel();
+  save();
+}
+
+/** A small still picture of a fabric, exactly as its grid looks. */
+function drawThumb(cv: HTMLCanvasElement, p: Pattern, w: number, h: number) {
+  const L = computeLayout(p, stageSize.w, stageSize.h);
+  thumbRenderer.reset();
+  thumbRenderer.draw(p, L, { tool: 'draw', hover: { kind: 'none' }, rect: null, groupSel: null, drop: null, playheadId: null, hold: null, stripSel: null, rowSel: null, glow: 0, glowRect: null });
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.getContext('2d')!.drawImage(thumbCanvas, 0, 0, stageSize.w * dpr, stageSize.h * dpr, 0, 0, cv.width, cv.height);
+}
+
+function markPlaying() {
+  [...cards.querySelectorAll('.card')].forEach((c, i) => c.classList.toggle('playing', scheduler.playing && items[i]?.id === playId));
+}
+
+function pickCard(i: number) {
+  tableSel = Math.max(0, Math.min(items.length - 1, i));
+  renderTable();
+  cards.children[tableSel]?.scrollIntoView({ block: 'nearest' });
+}
+
+function renderTable() {
+  cards.replaceChildren();
+  const w = Math.round(Math.min(480, Math.max(240, stageSize.w * 0.4))), h = Math.round((w * stageSize.h) / stageSize.w);
+  items.forEach((it, i) => {
+    const card = document.createElement('div');
+    card.className = i === tableSel ? 'card sel' : 'card';
+    // The number picks the fabric (tap) and moves it (drag); the picture goes inside.
+    const n = document.createElement('button');
+    n.className = 'card-n';
+    n.textContent = String(i + 1);
+    n.title = 'Tap to pick, drag to move';
+    const pic = document.createElement('canvas');
+    pic.className = 'card-pic';
+    pic.style.width = `${w}px`;
+    pic.style.height = `${h}px`;
+    pic.title = 'Go into this fabric';
+    pic.onclick = () => closeTable(i);
+    card.append(n, pic);
+    if (i === tableSel) {
+      const acts = document.createElement('div');
+      acts.className = 'card-actions';
+      acts.append(button('Duplicate', () => duplicateFabric(i)), button('Delete', () => void deleteFabric(i), { danger: true, disabled: items.length < 2 }));
+      card.append(acts);
+    }
+    dragCard(n, card, i);
+    cards.append(card);
+    drawThumb(pic, it.history.current, w, h);
+  });
+  const add = button('+', addFabric);
+  add.className = 'card-add';
+  add.title = 'A new, blank fabric at the end';
+  add.style.width = `${w}px`;
+  cards.append(add);
+  markPlaying();
+  updatePanel();
+}
+
+/** Drag a card by its number to a new place in the order. */
+function dragCard(handle: HTMLElement, card: HTMLElement, i: number) {
+  let y0 = 0, moved = false, to = i;
+  const line = document.createElement('div');
+  line.className = 'drop-line';
+  handle.addEventListener('pointerdown', (e) => { handle.setPointerCapture(e.pointerId); y0 = e.clientY; moved = false; to = i; });
+  handle.addEventListener('pointermove', (e) => {
+    if (!handle.hasPointerCapture(e.pointerId)) return;
+    if (Math.abs(e.clientY - y0) > 6) moved = true;
+    if (!moved) return;
+    card.classList.add('dragging');
+    card.style.transform = `translateY(${e.clientY - y0}px)`;
+    // Where it would land: after every other card whose middle is above the pointer.
+    const others = [...cards.querySelectorAll<HTMLElement>('.card')].filter((c) => c !== card);
+    to = others.filter((c) => { const b = c.getBoundingClientRect(); return e.clientY > b.top + b.height / 2; }).length;
+    const before = others[to], last = others[others.length - 1];
+    line.style.top = `${before ? before.offsetTop - 9 : last ? last.offsetTop + last.offsetHeight + 9 : 0}px`;
+    if (!line.isConnected) cards.append(line);
+  });
+  const end = () => {
+    line.remove();
+    card.classList.remove('dragging');
+    card.style.transform = '';
+    if (!moved) return pickCard(i);
+    const open = items[cur].id;
+    const [it] = items.splice(i, 1);
+    items.splice(to, 0, it);
+    cur = items.findIndex((x) => x.id === open);
+    tableSel = to;
+    save();
+    renderTable();
+  };
+  handle.addEventListener('pointerup', end);
+  handle.addEventListener('pointercancel', end);
+}
+
+function addFabric() {
+  items.push(makeItem(fresh()));
+  save();
+  pickCard(items.length - 1);
+  cards.lastElementChild?.scrollIntoView({ block: 'nearest' });
+}
+
+/** A copy right after the original: this is how a fabric is repeated, or varied. */
+function duplicateFabric(i: number) {
+  items.splice(i + 1, 0, makeItem(structuredClone(items[i].history.current)));
+  if (cur > i) cur++;
+  save();
+  pickCard(i + 1);
+}
+
+async function deleteFabric(i: number) {
+  if (items.length < 2) return;
+  if (!(await ask(`Delete fabric ${i + 1}? It can't be brought back.`, 'Delete'))) return;
+  const open = items[cur].id, gone = items[i].id;
+  items.splice(i, 1);
+  if (scheduler.playing && playId === gone) togglePlay();
+  cur = Math.max(0, items.findIndex((x) => x.id === open));
+  history = items[cur].history;
+  renderer.reset();
+  save();
+  pickCard(Math.min(i, items.length - 1));
+}
+
+/** Zoom out: the grid shrinks into its card on the table (the dive, the other way round). */
+function openTable() {
+  if (tableOpen || tableBusy || sliding || fibre || diving()) return;
+  clearSelection();
+  stage.scrollTo(0, 0);
+  stage.style.overflow = 'hidden';
+  stageSize = { w: stage.clientWidth, h: stage.clientHeight };
+  seen = true;
+  save();
+  tableOpen = tableBusy = true;
+  tableSel = cur;
+  table.hidden = false;
+  renderTable();
+  const pic = cards.children[cur].querySelector<HTMLElement>('.card-pic')!;
+  pic.scrollIntoView({ block: 'center' });
+  const a = stage.getBoundingClientRect(), b = pic.getBoundingClientRect();
+  const to = `translate(${b.left - a.left}px, ${b.top - a.top}px) scale(${b.width / a.width})`;
+  canvas.style.transformOrigin = '0 0';
+  canvas.style.position = 'relative';
+  canvas.style.zIndex = '3';
+  pic.style.visibility = 'hidden';
+  const done = () => {
+    canvas.style.visibility = 'hidden';
+    pic.style.visibility = '';
+    tableBusy = false;
+    updateLevel();
+  };
+  if (still()) done();
+  else void canvas.animate([{ transform: 'none' }, { transform: to }], DIVE).finished.then(done);
+  updateLevel();
+}
+
+/** Go into fabric i: its card grows until it is the grid. */
+function closeTable(i: number) {
+  if (!tableOpen || tableBusy) return;
+  tableBusy = true;
+  switchTo(i);
+  const pic = cards.children[cur].querySelector<HTMLElement>('.card-pic')!;
+  const a = stage.getBoundingClientRect(), b = pic.getBoundingClientRect();
+  const from = `translate(${b.left - a.left}px, ${b.top - a.top}px) scale(${b.width / a.width})`;
+  tick(); // draw the fabric before it shows
+  canvas.style.visibility = '';
+  pic.style.visibility = 'hidden';
+  const done = () => {
+    table.hidden = true;
+    tableOpen = tableBusy = false;
+    canvas.style.zIndex = '';
+    stage.style.overflow = '';
+    updateLevel();
+  };
+  if (still()) done();
+  else void canvas.animate([{ transform: from }, { transform: 'none' }], DIVE).finished.then(done);
+}
+
+/** On to the next fabric (after the last comes the first): the grid slides away to the left
+ * and the next one slides in. If it is playing, the next fabric starts at once. */
+function nextFabric() {
+  if (items.length < 2 || tableOpen || tableBusy || sliding || fibre || diving()) return;
+  sliding = true;
+  const snap = document.createElement('canvas');
+  snap.width = canvas.width;
+  snap.height = canvas.height;
+  snap.getContext('2d')!.drawImage(canvas, 0, 0);
+  snap.style.cssText = `position:absolute;left:0;top:0;width:${canvas.style.width};height:${canvas.style.height};z-index:3;pointer-events:none`;
+  stage.append(snap);
+  stage.style.overflowX = 'hidden';
+  switchTo((cur + 1) % items.length);
+  markPlaying();
+  tick();
+  const done = () => { snap.remove(); stage.style.overflowX = ''; sliding = false; };
+  if (still()) return done();
+  const slide = { duration: 340, easing: 'cubic-bezier(.3,.7,.2,1)' };
+  canvas.animate([{ transform: 'translateX(100%)' }, { transform: 'none' }], slide);
+  void snap.animate([{ transform: 'none' }, { transform: 'translateX(-100%)' }], slide).finished.then(done);
+}
+
 // ---------------------------------------------------------------- pointer gestures
 
 type Gesture =
@@ -686,7 +977,7 @@ function paint(ti: number, ri: number, slot: number, mode: 'fill' | 'erase') {
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 canvas.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0 || diving()) return;
+  if (e.button !== 0 || diving() || tableOpen || tableBusy || sliding) return;
   engine.resume();
   const { x, y } = point(e);
   const t = hitTest(layout, pattern(), x, y);
@@ -900,6 +1191,15 @@ window.addEventListener('keydown', (e) => {
   if (el.type === 'range' && e.code !== 'Space') return;
   if ($<HTMLDialogElement>('credits').open || $<HTMLDialogElement>('ask').open) return;
   const mod = e.metaKey || e.ctrlKey;
+  if (tableOpen) {
+    // Out on the table: pick with the arrows, Enter goes in, ⌘D duplicates, Delete deletes.
+    if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+    else if (e.key === 'Enter' || e.key === 'Escape') closeTable(tableSel);
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); pickCard(tableSel + (e.key === 'ArrowUp' ? -1 : 1)); }
+    else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateFabric(tableSel); }
+    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); void deleteFabric(tableSel); }
+    return;
+  }
   if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
   else if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? history.redo() : history.undo(); clearSelection(); updateLevel(); }
   else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); doDuplicate(); }
@@ -929,6 +1229,11 @@ const SWING_CELLS: Partial<Record<RowTag, number>> = { BD: 1.6, FT: 1.4, HT: 1.2
 
 let lastFrame = performance.now();
 function frame() {
+  tick();
+  requestAnimationFrame(frame);
+}
+function tick() {
+  if (tableOpen && !tableBusy) { scheduler.due(); return; } // the grid is out of sight
   const p = pattern();
   const nowMs = performance.now(), dt = Math.min(100, nowMs - lastFrame);
   lastFrame = nowMs;
@@ -946,8 +1251,8 @@ function frame() {
   layout = computeLayout(p, stage.clientWidth, stage.clientHeight, stripAnchor?.colW ?? touchColW ?? undefined,
     fibre ? { region: fibre.region, u: ease(zoomU) } : undefined);
   if (stripAnchor && !gesture) view.hover = hitTest(layout, p, stripAnchor.x, stripAnchor.y);
-  const cell = threadSeconds(scheduler.bpm?.() ?? p.bpm);
-  for (const f of scheduler.due()) {
+  const cell = threadSeconds(scheduler.bpm?.() ?? projectBpm);
+  for (const f of playId !== items[cur].id ? [] : scheduler.due()) {
     if (f.start) view.playheadId = f.threadId;
     // A note sets its string swinging: the thread's string for a note on the beat, and the
     // fibre's own fine string for a note between the beats.
@@ -981,19 +1286,23 @@ function frame() {
   // and threads with a selection or inside a region, threads and fabric otherwise. (Fabric
   // stays dim until it exists.)
   part('z-fibre', inside, !inside && hasSel, !inside && hasSel);
-  part('z-thread', !inside, inside);
-  part('z-fabric', false, false);
+  part('z-thread', !inside && !tableOpen, inside || tableOpen);
+  part('z-fabric', tableOpen, !tableOpen && seen); // dim until the table has been visited once
+  const two = !inside && !hasSel && !tableOpen;
   document.querySelector('#zoom .z-fibre')!.classList.toggle('off', !inside && !hasSel);
   document.querySelector('#zoom .z-fabric')!.classList.toggle('off', inside || hasSel);
-  $('zoom').title = inside ? 'Back to the threads (Esc)' : hasSel ? 'Go inside the selection: split it into fibres (Enter)' : 'Fabric: the whole pattern at a glance';
+  document.querySelector('#zoom .z-thread')!.classList.toggle('next', two && items.length > 1);
+  $('zoom').classList.toggle('two', two);
+  $('zoom').title = tableOpen ? 'Into the picked fabric (Enter)' : inside ? 'Back to the threads (Esc)'
+    : hasSel ? 'Go inside the selection: split it into fibres (Enter)'
+    : items.length > 1 ? 'Left: on to the next fabric. Right: out to all the fabrics' : 'Out to the table of fabrics';
   const anySolo = ROWS.some((t) => mix[t]?.solo);
   const quiet = ROWS.map((t) => !!mix[t]?.mute || (anySolo && !mix[t]?.solo));
   renderer.draw(p, layout, { ...view, rect: selRect(), quiet });
-  requestAnimationFrame(frame);
 }
 
 updatePanel();
 requestAnimationFrame(frame);
 
 // Development-only handle for automated checks; not present in production builds.
-if (import.meta.env.DEV) Object.assign(window, { __rg: { engine, scheduler, history } });
+if (import.meta.env.DEV) Object.assign(window, { __rg: { engine, scheduler, get history() { return history; }, get items() { return items; } } });

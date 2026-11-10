@@ -39,8 +39,17 @@ export class Renderer {
   private wobble = new Map<string, Wobble>(); // by thread id, or "thread:row:slot" for a fibre
   private last = performance.now();
 
-  constructor(private canvas: HTMLCanvasElement) {
+  /** frozen: no motion at all (for small still pictures of a fabric). */
+  constructor(private canvas: HTMLCanvasElement, private frozen = false) {
     this.ctx = canvas.getContext('2d')!;
+  }
+
+  /** Forget every string's place and swing: a different fabric is about to be drawn. */
+  reset() {
+    this.xNow.clear();
+    this.alpha.clear();
+    this.wobble.clear();
+    this.fibreSwing.clear();
   }
 
   /** Set a string swinging. amp in px; tau = decay time; heavier beads swing further and slower. */
@@ -83,7 +92,7 @@ export class Renderer {
     const dt = Math.min(0.1, (nowMs - this.last) / 1000);
     this.last = nowMs;
     const now = nowMs / 1000;
-    const still = reducedMotion();
+    const still = this.frozen || reducedMotion();
 
     // Springy positions: strings slide to their places when cells are added, removed or moved.
     const k = still || L.u > 0 ? 1 : 1 - Math.exp(-dt * 16); // the dive moves strings itself

@@ -36,6 +36,8 @@ export class Scheduler {
   private rows: readonly RowTag[] = ROWS;
   /** Called when a play-once stretch has finished. */
   onEnd: (() => void) | null = null;
+  /** Called each time the pattern comes round to its start, with the audio time of that start. */
+  onLoop: ((time: number) => void) | null = null;
   /** A tempo to play at instead of the pattern's own (for listening slowly inside a region). */
   bpm: (() => number | null) | null = null;
   /** Looping the whole pattern (not playing a stretch once). */
@@ -69,7 +71,7 @@ export class Scheduler {
   }
 
   private tick() {
-    const p = this.pattern();
+    let p = this.pattern();
     const now = this.engine.ctx.currentTime;
     // If audio fell far behind (tab was asleep), jump forward rather than play a burst.
     if (this.threadTime + this.booked * threadSeconds(this.tempo(p)) < now - 0.2) {
@@ -126,6 +128,11 @@ export class Scheduler {
         break;
       }
       this.idx = (this.idx + 1) % n;
+      if (this.idx === 0 && this.onLoop) {
+        // The loop is starting again: whoever listens may hand over a different pattern here.
+        this.onLoop(this.threadTime);
+        p = this.pattern();
+      }
       this.id = p.threads[this.idx].id;
     }
   }

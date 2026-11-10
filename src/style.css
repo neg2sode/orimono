@@ -59,7 +59,7 @@ button.ghost { border-color: transparent; color: var(--dim); }
 }
 .panel-end { display: flex; align-items: center; gap: 14px; margin-left: auto; align-self: stretch; }
 .length-wrap { position: relative; display: flex; align-self: center; }
-.readout { border: 1px solid transparent; padding: 4px 8px; background: transparent; display: flex; flex-direction: column; justify-content: center; font-size: 12px; color: var(--secondary); line-height: 1.3; text-align: right; }
+.readout { border: 1px solid transparent; padding: 4px 8px; background: transparent; display: flex; flex-direction: column; justify-content: center; font-size: 12px; color: var(--secondary); line-height: 1.3; text-align: right; min-width: 132px; } /* fixed room, so the zoom button beside it never moves */
 .divider { width: 1px; align-self: stretch; margin: 2px 0; background: #ffffff1c; }
 #sounds { padding-left: 6px; padding-right: 6px; }
 .readout span:first-child { color: var(--text); font-size: 14px; }
@@ -144,6 +144,32 @@ button:focus:not(:focus-visible) { outline: none; }
 .zoom .z-thread::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; background: currentColor; }
 .zoom .z-thread::after { content: ''; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: currentColor; }
 .zoom .off { flex-grow: 0; opacity: 0; }
+/* Two halves (nothing selected): a fine line between them, and each half answers the pointer. */
+.zoom.two { background: linear-gradient(#ffffff1c, #ffffff1c) center / 1px 60% no-repeat; }
+.zoom.two > *:hover { color: var(--text); }
+/* "Next fabric": the bead runs along the thread towards the grid. */
+.zoom .z-thread.next:hover::after, .zoom .z-thread.armed::after { animation: next-bead 0.9s ease-in-out infinite; }
+@keyframes next-bead { 0% { left: 20%; opacity: 0; } 25% { opacity: 1; } 80% { opacity: 1; } 100% { left: 108%; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .zoom .z-thread.next:hover::after, .zoom .z-thread.armed::after { animation: none; left: 85%; } }
+
+/* The table: every fabric as a card, in playing order from top to bottom. */
+#table { position: absolute; inset: 0; overflow: auto; z-index: 2; background: var(--bg); padding: 28px 18px 80px; }
+#table[hidden] { display: none; }
+#cards { position: relative; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.card { position: relative; display: flex; align-items: flex-start; gap: 12px; padding-right: 44px; }
+.card-n { width: 32px; height: 32px; border-radius: 50%; padding: 0; cursor: grab; touch-action: none; font-weight: 600; flex: none; }
+.card.sel .card-n { background: var(--text); color: var(--bg); border-color: var(--text); }
+.card-pic { display: block; border-radius: 8px; outline: 1px solid #ffffff1c; cursor: zoom-in; }
+.card-pic:hover { outline-color: var(--secondary); }
+.card.sel .card-pic { outline-color: var(--text); }
+.card.playing .card-pic { box-shadow: 0 0 0 3px var(--caramel); }
+.card.dragging { z-index: 2; }
+.card.dragging .card-pic { box-shadow: 0 10px 30px #000c; outline-color: var(--text); }
+.card.dragging .card-n { cursor: grabbing; }
+.card-actions { position: absolute; left: calc(100% - 32px); top: 0; display: flex; flex-direction: column; gap: 6px; }
+.card-add { height: 44px; border-style: dashed; color: var(--dim); font-size: 18px; }
+.drop-line { position: absolute; left: 25%; right: 25%; height: 2px; margin-top: -1px; background: var(--text); pointer-events: none; }
+
 .zoom .here { color: var(--text); }
 .zoom .go { color: var(--caramel); }
 .zoom .go.breathe { animation: breathe 1.6s ease-in-out infinite; }
