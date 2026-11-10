@@ -449,9 +449,9 @@ export class Renderer {
 
     // Gap targets: ✂ split, ⋈ merge.
     if (h.kind === 'split' || h.kind === 'merge') {
-      // The label sits halfway between the two numbers; its line then steps across to where
-      // the groups meet (or would meet), just before the next string.
-      const x = midX(L, h.g), edge = gapX(L, h.g);
+      // The label sits halfway between the two numbers. A split is a straight cut there; a
+      // merge's line steps across to where the two groups meet, just before the next string.
+      const x = midX(L, h.g), edge = h.kind === 'split' ? x : gapX(L, h.g);
       ctx.strokeStyle = h.kind === 'split' ? UI.text : UI.play;
       ctx.lineWidth = 1.5;
       ctx.lineJoin = 'round';
