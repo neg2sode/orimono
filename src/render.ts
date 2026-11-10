@@ -1,7 +1,7 @@
 // Drawing (§11): each thread is a vertical string in its group's colour, hits are beads whose
 // size is their velocity, and strings wobble when the playhead plucks them.
 
-import { LABEL_W, fibreX, gapX, regionBox, rowY, type Layout, type Target } from './layout';
+import { LABEL_W, cellL, cellR, fibreX, gapX, regionBox, rowY, type Layout, type Target } from './layout';
 import { PALETTE, ROWS, UI } from './constants';
 import type { Pattern, Rect } from './model';
 
@@ -12,7 +12,7 @@ export interface ViewState {
   groupSel: [number, number] | null;
   drop: { a: number; b: number; idx: number } | null;
   playheadId: number | null;
-  hold: { threadId: number; ri: number; dx: number } | null;
+  hold: { threadId: number; ri: number; slot: number; dx: number } | null;
   /** Touch: the number whose menu is open. */
   stripSel: number | null;
   /** Whole rows picked by their name tags. */
@@ -36,8 +36,7 @@ export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private xNow = new Map<number, number>(); // animated x per thread id
   private alpha = new Map<number, number>(); // fade-in for new strings
-  private wobble = new Map<number, Wobble>();
-  private pops = new Map<string, number>(); // seed beads that just played: "thread:row:slot" → time
+  private wobble = new Map<string, Wobble>(); // by thread id, or "thread:row:slot" for a fibre
   private last = performance.now();
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -47,22 +46,22 @@ export class Renderer {
   /** Set a string swinging. amp in px; tau = decay time; heavier beads swing further and slower. */
   pluck(threadId: number, amp: number, tau: number, freq: number) {
     if (reducedMotion()) return;
-    this.wobble.set(threadId, { amp, t0: performance.now() / 1000, freq, tau });
+    this.wobble.set(String(threadId), { amp, t0: performance.now() / 1000, freq, tau });
   }
 
-  /** A seed bead (a note on a fibre) was just played: it swells for a moment. */
-  pop(threadId: number, row: string, slot: number) {
+  /** The same for one fibre: the fine string of one row, at one of a thread's fibres. */
+  pluckFibre(threadId: number, row: string, slot: number, amp: number, tau: number, freq: number) {
     if (reducedMotion()) return;
-    this.pops.set(`${threadId}:${row}:${slot}`, performance.now());
+    this.wobble.set(`${threadId}:${row}:${slot}`, { amp, t0: performance.now() / 1000, freq, tau });
   }
 
-  private displacement(threadId: number, u: number, now: number): number {
-    const w = this.wobble.get(threadId);
+  private displacement(key: string, u: number, now: number): number {
+    const w = this.wobble.get(key);
     if (!w) return 0;
     const t = now - w.t0;
     const env = Math.exp(-t / w.tau);
     if (env < 0.01) {
-      this.wobble.delete(threadId);
+      this.wobble.delete(key);
       return 0;
     }
     return w.amp * env * Math.sin(2 * Math.PI * w.freq * t) * Math.sin(Math.PI * u);
@@ -108,7 +107,7 @@ export class Renderer {
 
     // Group tint behind each group, a little stronger when selected.
     L.runs.forEach((r, i) => {
-      const x0 = xs[r.start] - L.colW / 2, x1 = xs[r.end - 1] + L.colW / 2 + (i === L.runs.length - 1 ? L.tail : 0);
+      const x0 = xs[r.start] - L.pad, x1 = xs[r.end - 1] + L.colW - L.pad;
       const sel = s.groupSel && i >= s.groupSel[0] && i <= s.groupSel[1];
       ctx.globalAlpha = sel ? 0.13 : 0.045;
       ctx.fillStyle = PALETTE[r.colour].hex;
@@ -131,8 +130,8 @@ export class Renderer {
       ctx.strokeStyle = 'rgba(105,117,127,0.13)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(Math.max(LABEL_W - 6, xs[0] - L.colW / 2 - 6), Math.round(y) + 0.5);
-      ctx.lineTo(xs[xs.length - 1] + L.colW / 2 + L.tail, Math.round(y) + 0.5);
+      ctx.moveTo(Math.max(LABEL_W - 6, xs[0] - L.pad - 6), Math.round(y) + 0.5);
+      ctx.lineTo(xs[xs.length - 1] + L.colW - L.pad, Math.round(y) + 0.5);
       ctx.stroke();
     });
 
@@ -141,8 +140,7 @@ export class Renderer {
     if (playIdx >= 0) {
       ctx.fillStyle = colourOf(playIdx);
       ctx.globalAlpha = 0.12;
-      // Inside a region the glow covers the thread's whole time: from its string to the next.
-      ctx.fillRect(xs[playIdx] - (L.colW / 2) * (1 - u) + 1, L.top - 6, L.colW - 2, L.bottom - L.top + 12);
+      ctx.fillRect(xs[playIdx] - L.pad + 1, L.top - 6, L.colW - 2, L.bottom - L.top + 12);
       ctx.globalAlpha = 1;
     }
 
@@ -155,12 +153,12 @@ export class Renderer {
     p.threads.forEach((t, ti) => {
       const colour = colourOf(ti);
       const a = this.alpha.get(t.id) ?? 1;
-      const hold = s.hold && s.hold.threadId === t.id ? s.hold : null;
+      const hold = s.hold && s.hold.threadId === t.id && s.hold.slot === 0 ? s.hold : null;
       const holdU = hold ? (rowY(L, hold.ri) - y0) / span : 0;
       const off = (y: number) => {
         const u = (y - y0) / span;
         if (hold) return hold.dx * (u < holdU ? u / holdU : (1 - u) / (1 - holdU));
-        return this.displacement(t.id, u, now);
+        return this.displacement(String(t.id), u, now);
       };
       ctx.globalAlpha = a * (ti === playIdx ? 1 : 0.85);
       ctx.strokeStyle = colour;
@@ -183,36 +181,50 @@ export class Renderer {
         // A zoomed cell: its fibres are short, fine strings after the main one, each at its
         // true moment, carrying seed beads (smaller, so twelve fit in a column).
         const seedR = z > 1 ? Math.max(1.8, Math.min(rMax * 0.62, (L.colW / z) * 0.42)) : rMax;
+        // How far fibre k is pushed sideways at height u (0–1) of its fine string: pulled by a
+        // pluck, or swinging after its note played, like the main strings.
+        const h = L.rowH * (0.3 + 0.2 * (inReg(ti, ri) ? u : 0));
+        const reach = (L.colW / z) * 0.45;
+        const fOff = (k: number, uu: number) => {
+          if (s.hold && s.hold.threadId === t.id && s.hold.ri === ri && s.hold.slot === k) {
+            return Math.max(-reach, Math.min(reach, s.hold.dx)) * (1 - Math.abs(2 * uu - 1));
+          }
+          return Math.max(-reach, Math.min(reach, this.displacement(`${t.id}:${row}:${k}`, uu, now)));
+        };
         if (z > 1) {
           // A zoomed cell is a place to go into: a soft patch of its colour marks it. Inside,
           // its fibres stand as full strings.
           const inside = inReg(ti, ri) ? u : 0;
-          const pad = Math.min(L.colW / 2, Math.max(10, L.colW / 16));
           ctx.globalAlpha = a * 0.1;
           ctx.fillStyle = colour;
-          ctx.fillRect(xs[ti] - pad, y - L.rowH / 2 + 1.5, L.colW, L.rowH - 3);
+          ctx.fillRect(xs[ti] - L.pad, y - L.rowH / 2 + 1.5, L.colW, L.rowH - 3);
           ctx.globalAlpha = a * (0.38 + 0.22 * inside);
           ctx.strokeStyle = colour;
           ctx.lineWidth = 1;
           ctx.beginPath();
-          const h = L.rowH * (0.3 + 0.2 * inside);
           for (let k = 1; k < z; k++) {
-            const fx = Math.round(fibreX(L, xs[ti], k, z)) + 0.5;
-            ctx.moveTo(fx, y - h);
-            ctx.lineTo(fx, y + h);
+            const fx = fibreX(L, xs[ti], k, z);
+            if (fOff(k, 0.5) === 0) {
+              ctx.moveTo(Math.round(fx) + 0.5, y - h);
+              ctx.lineTo(Math.round(fx) + 0.5, y + h);
+            } else {
+              for (let j = 0; j <= 10; j++) {
+                const px = fx + fOff(k, j / 10), py = y - h + (2 * h * j) / 10;
+                if (j === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+              }
+            }
           }
           ctx.stroke();
         }
         for (let k = 0; k < z; k++) {
           const hit = lane?.slots[k];
-          const x = k === 0 ? xs[ti] + off(y) : fibreX(L, xs[ti], k, z);
+          const x = k === 0 ? xs[ti] + off(y) : fibreX(L, xs[ti], k, z) + fOff(k, 0.5);
           ctx.fillStyle = colour;
           if (hit) {
-            const popped = z > 1 ? this.pops.get(`${t.id}:${row}:${k}`) : undefined;
-            const swell = popped === undefined ? 1 : 1 + 0.6 * Math.exp(-(nowMs - popped) / 90);
             ctx.globalAlpha = a;
             ctx.beginPath();
-            const r = seedR * (0.42 + 0.58 * hit.v) * swell;
+            const r = seedR * (0.42 + 0.58 * hit.v);
             ctx.arc(x, y, r, 0, Math.PI * 2);
             ctx.fill();
             if (hit.mine && glow > 0 && inGlow) {
@@ -233,7 +245,6 @@ export class Renderer {
       });
       ctx.globalAlpha = 1;
     });
-    for (const [key, t0] of this.pops) if (nowMs - t0 > 600) this.pops.delete(key);
 
     // Thread level: the zoomed region under the pointer lights up (a press goes inside).
     if (s.hoverRegion && !reg) {
@@ -262,7 +273,7 @@ export class Renderer {
     // Matrix selection rectangle.
     if (s.rect) {
       const r = s.rect;
-      const x0 = xs[r.t0] - L.colW / 2, x1 = xs[r.t1] + L.colW / 2;
+      const x0 = xs[r.t0] - L.pad, x1 = xs[r.t1] + L.colW - L.pad;
       const ya = L.top + r.r0 * L.rowH, yb = L.top + (r.r1 + 1) * L.rowH;
       ctx.fillStyle = 'rgba(255,250,216,0.06)';
       ctx.fillRect(x0, ya, x1 - x0, yb - ya);
@@ -333,9 +344,34 @@ export class Renderer {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const h = s.hover;
-    const pillW = Math.min(30, L.colW - 6), pillH = L.numH / 2 - 4;
+    const pillW = Math.min(26, L.colW - 6), pillH = L.numH / 2 - 4;
+    // Inside a region the fibres get their own count, 1 to the last fibre of the region, when
+    // every row in it has the same number of fibres. Thread numbers fade away there.
+    const reg = L.region;
+    let fz = 0;
+    if (reg) {
+      fz = p.threads[reg.t0].lanes[ROWS[reg.r0]]?.zoom ?? 1;
+      for (let ti = reg.t0; ti <= reg.t1; ti++) for (let ri = reg.r0; ri <= reg.r1; ri++) if ((p.threads[ti].lanes[ROWS[ri]]?.zoom ?? 1) !== fz) fz = 0;
+    }
+    if (reg && fz > 1) {
+      const gap = L.colW / fz, every = gap >= 17 ? 1 : gap >= 9 ? 2 : gap >= 5 ? 4 : fz;
+      ctx.globalAlpha = L.u;
+      for (let ti = reg.t0; ti <= reg.t1; ti++) {
+        for (let k = 0; k < fz; k += every) {
+          ctx.font = `${k === 0 ? 600 : 400} 11px ${FONT}`;
+          ctx.fillStyle = k === 0 ? UI.text : UI.dim;
+          ctx.fillText(String((ti - reg.t0) * fz + k + 1), fibreX(L, xs[ti], k, fz), ny);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
     for (let ti = 0; ti < n; ti++) {
       const x = xs[ti];
+      if (reg) {
+        const inside = ti >= reg.t0 && ti <= reg.t1;
+        ctx.globalAlpha = inside ? (fz > 1 ? 1 - L.u : 1) : 1 - 0.65 * L.u;
+        if (ctx.globalAlpha < 0.02) continue;
+      }
       const hovered = (h.kind === 'add' || h.kind === 'del') && h.ti === ti;
       if (hovered) {
         // "+" above, "–" below, as two separate buttons.
@@ -364,6 +400,7 @@ export class Renderer {
       ctx.fillStyle = picked ? UI.bg : groupStart ? UI.secondary : UI.dim;
       ctx.fillText(String(ti + 1), x, ny);
     }
+    ctx.globalAlpha = 1;
 
     // New-group "+" at both ends: always visible, brighter on hover.
     for (const end of ['front', 'back'] as const) {
@@ -400,7 +437,7 @@ export class Renderer {
 
     // Group band.
     L.runs.forEach((r, i) => {
-      const x0 = xs[r.start] - L.colW / 2 + 1.5, x1 = xs[r.end - 1] + L.colW / 2 - 1.5;
+      const x0 = xs[r.start] - L.pad + 1.5, x1 = xs[r.end - 1] + L.colW - L.pad - 1.5;
       const sel = s.groupSel && i >= s.groupSel[0] && i <= s.groupSel[1];
       const hot = h.kind === 'band' && h.run === i;
       ctx.fillStyle = PALETTE[r.colour].hex;
@@ -419,7 +456,7 @@ export class Renderer {
     // Where dragged groups would land.
     if (s.drop) {
       const rest = L.runs.filter((_, i) => i < s.drop!.a || i > s.drop!.b);
-      const x = s.drop.idx < rest.length ? xs[rest[s.drop.idx].start] - L.colW / 2 : xs[n - 1] + L.colW / 2;
+      const x = s.drop.idx < rest.length ? cellL(L, rest[s.drop.idx].start) : cellR(L, n - 1);
       ctx.strokeStyle = UI.text;
       ctx.lineWidth = 2;
       ctx.beginPath();

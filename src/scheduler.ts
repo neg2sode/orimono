@@ -30,16 +30,24 @@ export class Scheduler {
   private booked = 0;
   /** Moments already booked, waiting for their time, for the playhead and string plucks. */
   private queue: Fired[] = [];
+  /** Playing a stretch once: the id of its last thread, and (once booked) when it ends. */
+  private lastId: number | null = null;
+  private endAt: number | null = null;
+  /** Called when a play-once stretch has finished. */
+  onEnd: (() => void) | null = null;
 
   constructor(private engine: Engine, private pattern: () => Pattern) {}
 
-  start() {
+  /** Loop the whole pattern, or with `once` play threads from..to (indices) a single time. */
+  start(once?: { from: number; to: number }) {
     if (this.playing) return;
     this.engine.resume();
     const p = this.pattern();
     this.playing = true;
-    this.idx = 0;
-    this.id = p.threads[0].id;
+    this.idx = once ? Math.min(once.from, p.threads.length - 1) : 0;
+    this.id = p.threads[this.idx].id;
+    this.lastId = once ? p.threads[Math.min(once.to, p.threads.length - 1)].id : null;
+    this.endAt = null;
     this.threadTime = this.engine.ctx.currentTime + 0.06;
     this.booked = 0;
     this.tick();
@@ -60,6 +68,15 @@ export class Scheduler {
     if (this.threadTime + this.booked * threadSeconds(p.bpm) < now - 0.2) {
       this.threadTime = now + 0.02;
       this.booked = 0;
+    }
+    if (this.endAt !== null) {
+      // The stretch is fully booked: when its time is up, playing ends by itself. Notes ring out.
+      if (now >= this.endAt) {
+        this.playing = false;
+        window.clearInterval(this.timer);
+        this.onEnd?.();
+      }
+      return;
     }
     const horizon = now + AHEAD_S;
     for (;;) {
@@ -97,6 +114,10 @@ export class Scheduler {
       if (upTo < 1) break;
       this.threadTime += dur;
       this.booked = 0;
+      if (thread.id === this.lastId) {
+        this.endAt = this.threadTime;
+        break;
+      }
       this.idx = (this.idx + 1) % n;
       this.id = p.threads[this.idx].id;
     }

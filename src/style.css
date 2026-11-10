@@ -142,8 +142,10 @@ button:focus:not(:focus-visible) { outline: none; }
 @media (prefers-reduced-motion: reduce) { .zoom svg.go.breathe { animation: none; } }
 #fibre-count { align-items: center; }
 #fibre-count[hidden] { display: none; }
-#fibre-count span { min-width: 38px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--text); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-#fibre-count button:last-child { border-left: 1px solid var(--border); }
+#fibre-count #fib-n { min-width: 42px; border-left: none; color: var(--text); }
+.zoom-grid button.keeps { border-color: var(--text); color: var(--text); }
+.zoom-grid button.lossy { opacity: 0.45; }
+#zoom-pop .zoom-foot { margin-top: 8px; font-size: 11px; }
 #zoom-pop {
   position: absolute; top: calc(100% + 8px); left: 0; z-index: 5; width: 232px;
   background: var(--panel); border: 1px solid #00000060; border-radius: 8px; box-shadow: 0 6px 18px #0008;

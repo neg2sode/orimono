@@ -23,13 +23,13 @@ export interface Layout {
   bandTop: number;
   bandH: number;
   numH: number;
-  /** Centre x of each thread, by index. */
+  /** The x of each thread's string, by index. A thread's cell runs from just before its
+   *  string (`pad`) to just before the next one: time runs left to right inside it. */
   xs: number[];
+  pad: number;
   runs: Run[];
   /** Number labels every n threads when columns are narrow. */
   labelEvery: number;
-  /** Extra width after the last column, when the last thread's fibres reach past it. */
-  tail: number;
   /** Fibre level: the part of the pattern being looked into, and how far in the view is
    *  (0 = thread level, 1 = fully inside; in between while the view dives in or out). */
   region: Rect | null;
@@ -48,13 +48,11 @@ export function computeLayout(p: Pattern, viewW: number, viewH: number, frozenCo
   for (let i = 1; i < rs.length; i++) if (rs[i].colour === rs[i - 1].colour) sameGaps++;
   const avail = viewW - LABEL_W - PAD_R - sameGaps * SAME_COLOUR_GAP;
   // Fill the window: columns and rows stretch (within limits that keep beads in proportion).
-  // A zoomed thread's fibres sit after its string, so a zoomed last thread needs room on the right.
-  const tailCols = Object.values(p.threads[n - 1].lanes).some((l) => l.zoom > 1) ? 0.5 : 0;
-  let colW = frozenColW ?? Math.max(12, Math.min(140, avail / (n + tailCols)));
+  let colW = frozenColW ?? Math.max(12, Math.min(140, avail / n));
   let rowH = Math.max(18, Math.min(56, (viewH - TOP - STRIP_H - 12) / ROWS.length));
   const place = (w: number) => {
     const out: number[] = [];
-    let x = LABEL_W + w / 2;
+    let x = LABEL_W + padOf(w);
     rs.forEach((r, ri) => {
       if (ri > 0 && r.colour === rs[ri - 1].colour) x += SAME_COLOUR_GAP;
       for (let i = r.start; i < r.end; i++) {
@@ -67,7 +65,7 @@ export function computeLayout(p: Pattern, viewW: number, viewH: number, frozenCo
   let xs = place(colW);
   let top = TOP;
   let numTop = TOP + rowH * ROWS.length + 8;
-  let width = Math.max(viewW, xs[n - 1] + colW / 2 + tailCols * colW + PAD_R);
+  let width = Math.max(viewW, xs[n - 1] + colW - padOf(colW) + PAD_R);
   let height = Math.max(viewH, numTop + STRIP_H);
 
   // Diving into a region: the same picture, magnified until the region fills the window. Its box
@@ -81,7 +79,7 @@ export function computeLayout(p: Pattern, viewW: number, viewH: number, frozenCo
     const areaY = PEEK * 0.8, areaH = Math.max(80, viewH - STRIP_H - 8 - PEEK * 0.8 - areaY);
     const colIn = Math.max(colW, Math.min(480, (areaW - gaps) / nT));
     const rowIn = Math.max(rowH, Math.min(110, areaH / nR));
-    const x0 = mix(xs[r.t0], areaX + (areaW - nT * colIn - gaps) / 2 + regionPad(colIn));
+    const x0 = mix(xs[r.t0], areaX + (areaW - nT * colIn - gaps) / 2 + padOf(colIn));
     const y0 = mix(TOP + r.r0 * rowH, areaY + (areaH - nR * rowIn) / 2);
     colW = mix(colW, colIn);
     rowH = mix(rowH, rowIn);
@@ -96,18 +94,21 @@ export function computeLayout(p: Pattern, viewW: number, viewH: number, frozenCo
   return {
     width, height, rowH, colW, top, bottom: top + rowH * ROWS.length, numTop,
     bandTop: numTop + NUM_H + BAND_GAP, bandH: BAND_H, numH: NUM_H, xs, runs: rs,
-    labelEvery: colW >= 18 ? 1 : colW >= 10 ? 2 : 4, tail: tailCols * colW,
+    labelEvery: colW >= 18 ? 1 : colW >= 10 ? 2 : 4, pad: padOf(colW),
     region: r, u: r && cam ? cam.u : 0,
   };
 }
 
-const regionPad = (colW: number) => Math.min(colW / 2, Math.max(10, colW / 16));
+/** How far before its string a thread's cell starts: room for a bead, small next to the cell. */
+const padOf = (colW: number) => Math.min(colW / 2, Math.max(colW / 16, Math.min(16, colW * 0.3)));
 
-/** The box around a zoomed region. Fibres sit after their strings (true time), so the box
- *  starts just before the first string and ends just before the string after the last. */
+/** Left and right edge of thread i's cell. */
+export const cellL = (L: Layout, i: number) => L.xs[i] - L.pad;
+export const cellR = (L: Layout, i: number) => L.xs[i] + L.colW - L.pad;
+
+/** The box around an area of cells. */
 export function regionBox(L: Layout, r: Rect) {
-  const g = regionPad(L.colW);
-  return { x0: L.xs[r.t0] - g, x1: L.xs[r.t1] + L.colW - g, y0: L.top + r.r0 * L.rowH, y1: L.top + (r.r1 + 1) * L.rowH };
+  return { x0: cellL(L, r.t0), x1: cellR(L, r.t1), y0: L.top + r.r0 * L.rowH, y1: L.top + (r.r1 + 1) * L.rowH };
 }
 
 /** Where fibre k of a ×z cell is drawn, given its string's x: at its true moment. */
@@ -118,18 +119,17 @@ export const rowY = (L: Layout, ri: number) => L.top + L.rowH * (ri + 0.5);
 /** The x of gap g (between thread g-1 and g). Gap 0 is the front, gap n the back. */
 export function gapX(L: Layout, g: number) {
   const n = L.xs.length;
-  if (g <= 0) return L.xs[0] - L.colW / 2;
-  if (g >= n) return L.xs[n - 1] + L.colW / 2;
-  return (L.xs[g - 1] + L.xs[g]) / 2;
+  if (g <= 0) return cellL(L, 0);
+  if (g >= n) return cellR(L, n - 1);
+  return (cellR(L, g - 1) + cellL(L, g)) / 2;
 }
 
+/** The thread whose cell holds x (with a few px of slack at the two ends), or -1. */
 function threadAtX(L: Layout, x: number): number {
-  let best = -1, bestD = Infinity;
-  L.xs.forEach((cx, i) => {
-    const d = Math.abs(x - cx);
-    if (d < bestD) { bestD = d; best = i; }
-  });
-  return bestD <= L.colW / 2 + 5 ? best : -1;
+  const n = L.xs.length;
+  if (x < cellL(L, 0) - 5 || x > cellR(L, n - 1) + 5) return -1;
+  for (let i = n - 1; i > 0; i--) if (x >= gapX(L, i)) return i;
+  return 0;
 }
 
 export type Target =
@@ -172,12 +172,7 @@ export function hitTest(L: Layout, p: Pattern, x: number, y: number): Target {
     const ri = Math.floor((y - L.top) / L.rowH);
     const col = threadAtX(L, x);
     if (col < 0) return { kind: 'none' };
-    // A zoomed cell's fibres reach to the right of its string, into the next column. A press
-    // there belongs to the zoomed cell, unless it is close to the next (plain) string.
-    let ti = col;
-    const z = (i: number) => zoomOf(p, i, ROWS[ri]);
-    if (col > 0 && x < L.xs[col] - L.colW * 0.2 && z(col - 1) > 1 && z(col) === 1) ti = col - 1;
-    return { kind: 'cell', ti, ri, slot: 0, col };
+    return { kind: 'cell', ti: col, ri, slot: 0, col };
   }
   if (y >= L.numTop && y < L.numTop + L.numH) {
     // Gaps get a zone either side of the boundary; numbers get the rest.
@@ -192,7 +187,7 @@ export function hitTest(L: Layout, p: Pattern, x: number, y: number): Target {
     return y < L.numTop + L.numH / 2 ? { kind: 'add', ti } : { kind: 'del', ti };
   }
   if (y >= L.bandTop - 3 && y < L.bandTop + L.bandH + 5) {
-    const run = L.runs.findIndex((r) => x >= L.xs[r.start] - L.colW / 2 - 4 && x <= L.xs[r.end - 1] + L.colW / 2 + 4);
+    const run = L.runs.findIndex((r) => x >= cellL(L, r.start) - 4 && x <= cellR(L, r.end - 1) + 4);
     return run >= 0 ? { kind: 'band', run } : { kind: 'none' };
   }
   return { kind: 'none' };
@@ -203,9 +198,7 @@ export function touchStripTarget(L: Layout, x: number): { kind: 'front' } | { ki
   const n = L.xs.length;
   if (x < gapX(L, 0)) return { kind: 'front' };
   if (x > gapX(L, n)) return { kind: 'back' };
-  let best = 0;
-  L.xs.forEach((cx, i) => { if (Math.abs(x - cx) < Math.abs(x - L.xs[best])) best = i; });
-  return { kind: 'num', ti: best };
+  return { kind: 'num', ti: Math.max(0, threadAtX(L, x)) };
 }
 
 export const inNumberLane = (L: Layout, y: number) => y >= L.numTop && y < L.numTop + L.numH;
@@ -215,7 +208,7 @@ export function dropIndex(L: Layout, x: number, a: number, b: number): number {
   const rest = L.runs.filter((_, i) => i < a || i > b);
   let idx = 0;
   for (const r of rest) {
-    const mid = (L.xs[r.start] + L.xs[r.end - 1]) / 2;
+    const mid = (cellL(L, r.start) + cellR(L, r.end - 1)) / 2;
     if (x > mid) idx++;
   }
   return idx;

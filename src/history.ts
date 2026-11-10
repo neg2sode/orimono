@@ -54,15 +54,6 @@ export class History {
     this.onChange(next);
   }
 
-  /** Take back the last step as if it never happened (it can't be redone). */
-  retract() {
-    this.end();
-    const prev = this.past.pop();
-    if (!prev) return;
-    this.current = prev;
-    this.onChange(prev);
-  }
-
   get canUndo() {
     return this.past.length > 0;
   }
