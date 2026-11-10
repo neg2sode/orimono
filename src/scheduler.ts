@@ -33,13 +33,14 @@ export class Scheduler {
   /** Playing a stretch once: the id of its last thread, and (once booked) when it ends. */
   private lastId: number | null = null;
   private endAt: number | null = null;
+  private rows: readonly RowTag[] = ROWS;
   /** Called when a play-once stretch has finished. */
   onEnd: (() => void) | null = null;
 
   constructor(private engine: Engine, private pattern: () => Pattern) {}
 
-  /** Loop the whole pattern, or with `once` play threads from..to (indices) a single time. */
-  start(once?: { from: number; to: number }) {
+  /** Loop the whole pattern, or with `once` play threads from..to (indices, and only `rows`) a single time. */
+  start(once?: { from: number; to: number; rows?: readonly RowTag[] }) {
     if (this.playing) return;
     this.engine.resume();
     const p = this.pattern();
@@ -48,6 +49,7 @@ export class Scheduler {
     this.id = p.threads[this.idx].id;
     this.lastId = once ? p.threads[Math.min(once.to, p.threads.length - 1)].id : null;
     this.endAt = null;
+    this.rows = once?.rows ?? ROWS;
     this.threadTime = this.engine.ctx.currentTime + 0.06;
     this.booked = 0;
     this.tick();
@@ -98,7 +100,7 @@ export class Scheduler {
         return m;
       };
       if (this.booked === 0) at(0);
-      for (const row of ROWS) {
+      for (const row of this.rows) {
         const lane = thread.lanes[row];
         if (!lane) continue;
         lane.slots.forEach((hit, k) => {

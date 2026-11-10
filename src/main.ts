@@ -133,7 +133,8 @@ function togglePlay() {
     scheduler.stop();
     view.playheadId = null;
   } else if (fibre && zoomGoal === 1) {
-    scheduler.start({ from: fibre.region.t0, to: fibre.region.t1 }); // inside a region: its threads, once
+    const r = fibre.region; // inside a region: just the region, once
+    scheduler.start({ from: r.t0, to: r.t1, rows: ROWS.slice(r.r0, r.r1 + 1) });
   } else scheduler.start();
   playEnded = 0;
   showPlaying();

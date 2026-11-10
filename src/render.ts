@@ -53,7 +53,9 @@ export class Renderer {
   pluckFibre(threadId: number, row: string, slot: number, amp: number, tau: number, freq: number) {
     if (reducedMotion()) return;
     this.wobble.set(`${threadId}:${row}:${slot}`, { amp, t0: performance.now() / 1000, freq, tau });
+    this.fibreSwing.add(threadId);
   }
+  private fibreSwing = new Set<number>(); // threads that may have a fibre swinging
 
   private displacement(key: string, u: number, now: number): number {
     const w = this.wobble.get(key);
@@ -154,6 +156,7 @@ export class Renderer {
       const colour = colourOf(ti);
       const a = this.alpha.get(t.id) ?? 1;
       const hold = s.hold && s.hold.threadId === t.id && s.hold.slot === 0 ? s.hold : null;
+      const swinging = this.fibreSwing.has(t.id);
       const holdU = hold ? (rowY(L, hold.ri) - y0) / span : 0;
       const off = (y: number) => {
         const u = (y - y0) / span;
@@ -180,16 +183,32 @@ export class Renderer {
         const inGlow = !gr || (ti >= gr.t0 && ti <= gr.t1 && ri >= gr.r0 && ri <= gr.r1);
         // A zoomed cell: its fibres are short, fine strings after the main one, each at its
         // true moment, carrying seed beads (smaller, so twelve fit in a column).
-        const seedR = z > 1 ? Math.max(1.8, Math.min(rMax * 0.62, (L.colW / z) * 0.42)) : rMax;
-        // How far fibre k is pushed sideways at height u (0–1) of its fine string: pulled by a
-        // pluck, or swinging after its note played, like the main strings.
+        // Among the threads a bead's size is its loudness, zoomed or not. Inside a region the
+        // beads shrink to fit between the fibres.
+        const fit = Math.max(1.8, Math.min(rMax * 0.62, (L.colW / z) * 0.42));
+        const seedR = z > 1 ? rMax + (fit - rMax) * (inReg(ti, ri) ? u : 0) : rMax;
+        // A fibre is one fine string running through every neighbouring row with the same
+        // zoom. Pulled by a pluck, or swinging after one of its notes played, it moves as a
+        // whole, like the main strings. fOff: how far fibre k is pushed sideways at height yy.
         const h = L.rowH * (0.3 + 0.2 * (inReg(ti, ri) ? u : 0));
         const reach = (L.colW / z) * 0.45;
-        const fOff = (k: number, uu: number) => {
-          if (s.hold && s.hold.threadId === t.id && s.hold.ri === ri && s.hold.slot === k) {
-            return Math.max(-reach, Math.min(reach, s.hold.dx)) * (1 - Math.abs(2 * uu - 1));
+        let ra = ri, rb = ri;
+        if (z > 1 && (swinging || s.hold)) {
+          while (ra > 0 && (t.lanes[ROWS[ra - 1]]?.zoom ?? 1) === z) ra--;
+          while (rb < ROWS.length - 1 && (t.lanes[ROWS[rb + 1]]?.zoom ?? 1) === z) rb++;
+        }
+        const ya = L.top + ra * L.rowH, yb = L.top + (rb + 1) * L.rowH;
+        const pulled = s.hold && s.hold.threadId === t.id && s.hold.slot > 0 && s.hold.ri >= ra && s.hold.ri <= rb ? s.hold : null;
+        const fOff = (k: number, yy: number) => {
+          const uu = (yy - ya) / (yb - ya);
+          let d = 0;
+          if (pulled && pulled.slot === k) {
+            const hu = (rowY(L, pulled.ri) - ya) / (yb - ya);
+            d = pulled.dx * (uu < hu ? uu / hu : (1 - uu) / (1 - hu));
+          } else if (swinging) {
+            for (let r = ra; r <= rb; r++) d += this.displacement(`${t.id}:${ROWS[r]}:${k}`, uu, now);
           }
-          return Math.max(-reach, Math.min(reach, this.displacement(`${t.id}:${row}:${k}`, uu, now)));
+          return Math.max(-reach, Math.min(reach, d));
         };
         if (z > 1) {
           // A zoomed cell is a place to go into: a soft patch of its colour marks it. Inside,
@@ -204,12 +223,12 @@ export class Renderer {
           ctx.beginPath();
           for (let k = 1; k < z; k++) {
             const fx = fibreX(L, xs[ti], k, z);
-            if (fOff(k, 0.5) === 0) {
+            if (!pulled && !swinging) {
               ctx.moveTo(Math.round(fx) + 0.5, y - h);
               ctx.lineTo(Math.round(fx) + 0.5, y + h);
             } else {
               for (let j = 0; j <= 10; j++) {
-                const px = fx + fOff(k, j / 10), py = y - h + (2 * h * j) / 10;
+                const py = y - h + (2 * h * j) / 10, px = fx + fOff(k, py);
                 if (j === 0) ctx.moveTo(px, py);
                 else ctx.lineTo(px, py);
               }
@@ -219,7 +238,7 @@ export class Renderer {
         }
         for (let k = 0; k < z; k++) {
           const hit = lane?.slots[k];
-          const x = k === 0 ? xs[ti] + off(y) : fibreX(L, xs[ti], k, z) + fOff(k, 0.5);
+          const x = k === 0 ? xs[ti] + off(y) : fibreX(L, xs[ti], k, z) + fOff(k, y);
           ctx.fillStyle = colour;
           if (hit) {
             ctx.globalAlpha = a;
@@ -227,6 +246,12 @@ export class Renderer {
             const r = seedR * (0.42 + 0.58 * hit.v);
             ctx.arc(x, y, r, 0, Math.PI * 2);
             ctx.fill();
+            if (z > 1 && r * 2 > L.colW / z) {
+              // Beads closer together than they are wide: a dark rim keeps each one readable.
+              ctx.strokeStyle = UI.bg;
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            }
             if (hit.mine && glow > 0 && inGlow) {
               ctx.globalAlpha = a * glow;
               ctx.strokeStyle = UI.text;
@@ -245,6 +270,8 @@ export class Renderer {
       });
       ctx.globalAlpha = 1;
     });
+
+    if (![...this.wobble.keys()].some((k) => k.includes(':'))) this.fibreSwing.clear();
 
     // Thread level: the zoomed region under the pointer lights up (a press goes inside).
     if (s.hoverRegion && !reg) {
@@ -397,7 +424,7 @@ export class Renderer {
       if ((ti + 1) % L.labelEvery !== 0 && ti !== 0 && !picked) continue;
       const groupStart = L.runs.some((r) => r.start === ti);
       ctx.font = `${groupStart || picked ? 600 : 400} 11px ${FONT}`;
-      ctx.fillStyle = picked ? UI.bg : groupStart ? UI.secondary : UI.dim;
+      ctx.fillStyle = picked ? UI.bg : groupStart ? UI.text : UI.dim;
       ctx.fillText(String(ti + 1), x, ny);
     }
     ctx.globalAlpha = 1;
