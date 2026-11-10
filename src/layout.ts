@@ -1,7 +1,7 @@
 // Screen geometry: where every string, row and number sits, and what is under the pointer.
 
 import { ROWS } from './constants';
-import { isBoundary, runs, type Pattern, type Run } from './model';
+import { isBoundary, runs, zoomOf, type Pattern, type Run } from './model';
 
 export const LABEL_W = 60;
 const PAD_R = 28;
@@ -28,6 +28,8 @@ export interface Layout {
   runs: Run[];
   /** Number labels every n threads when columns are narrow. */
   labelEvery: number;
+  /** Extra width after the last column, when the last thread's fibres reach past it. */
+  tail: number;
 }
 
 /** frozenColW: keep this column width (while + / – is clicked repeatedly in one place). */
@@ -38,7 +40,9 @@ export function computeLayout(p: Pattern, viewW: number, viewH: number, frozenCo
   for (let i = 1; i < rs.length; i++) if (rs[i].colour === rs[i - 1].colour) sameGaps++;
   const avail = viewW - LABEL_W - PAD_R - sameGaps * SAME_COLOUR_GAP;
   // Fill the window: columns and rows stretch (within limits that keep beads in proportion).
-  const colW = frozenColW ?? Math.max(12, Math.min(140, avail / n));
+  // A zoomed thread's fibres sit after its string, so a zoomed last thread needs room on the right.
+  const tailCols = Object.values(p.threads[n - 1].lanes).some((l) => l.zoom > 1) ? 0.5 : 0;
+  const colW = frozenColW ?? Math.max(12, Math.min(140, avail / (n + tailCols)));
   const rowH = Math.max(18, Math.min(56, (viewH - TOP - STRIP_H - 12) / ROWS.length));
   const xs: number[] = [];
   let x = LABEL_W + colW / 2;
@@ -51,13 +55,17 @@ export function computeLayout(p: Pattern, viewW: number, viewH: number, frozenCo
   });
   const bottom = TOP + rowH * ROWS.length;
   const numTop = bottom + 8;
-  const width = Math.max(viewW, x - colW / 2 + PAD_R);
+  const tail = tailCols * colW;
+  const width = Math.max(viewW, x - colW / 2 + tail + PAD_R);
   return {
     width, height: Math.max(viewH, numTop + STRIP_H), rowH, colW, top: TOP, bottom, numTop,
     bandTop: numTop + NUM_H + BAND_GAP, bandH: BAND_H, numH: NUM_H, xs, runs: rs,
-    labelEvery: colW >= 18 ? 1 : colW >= 10 ? 2 : 4,
+    labelEvery: colW >= 18 ? 1 : colW >= 10 ? 2 : 4, tail,
   };
 }
+
+/** Where fibre k of a ×z cell is drawn, given its string's x: at its true moment. */
+export const fibreX = (L: Layout, stringX: number, k: number, z: number) => stringX + (k * L.colW) / z;
 
 export const rowY = (L: Layout, ri: number) => L.top + L.rowH * (ri + 0.5);
 
@@ -79,7 +87,9 @@ function threadAtX(L: Layout, x: number): number {
 }
 
 export type Target =
-  | { kind: 'cell'; ti: number; ri: number }
+  /** A note position: thread ti, fibre `slot` (0 when not zoomed). `col` is the column under
+   *  the pointer, which is what rectangle selection uses. */
+  | { kind: 'cell'; ti: number; ri: number; slot: number; col: number }
   | { kind: 'add'; ti: number } // "+" on a number
   | { kind: 'del'; ti: number } // "–" on a number
   | { kind: 'front' } // "+" before the first number: new group at the start
@@ -94,9 +104,22 @@ export function hitTest(L: Layout, p: Pattern, x: number, y: number): Target {
   const n = L.xs.length;
   if (y >= L.top && y < L.bottom) {
     if (x < LABEL_W - 8) return { kind: 'label', ri: Math.floor((y - L.top) / L.rowH) };
-    const ti = threadAtX(L, x);
-    if (ti < 0) return { kind: 'none' };
-    return { kind: 'cell', ti, ri: Math.floor((y - L.top) / L.rowH) };
+    const ri = Math.floor((y - L.top) / L.rowH);
+    const col = threadAtX(L, x);
+    // The nearest note position: a string, or one of a zoomed thread's fibres, which sit after
+    // its string at their true moments (fibre k of z is k/z of a column to the right).
+    let near = 0;
+    L.xs.forEach((cx, i) => { if (Math.abs(x - cx) < Math.abs(x - L.xs[near])) near = i; });
+    let best: { ti: number; slot: number } | null = null, bestD = Infinity;
+    for (let ti = Math.max(0, near - 1); ti <= Math.min(n - 1, near + 1); ti++) {
+      const z = zoomOf(p, ti, ROWS[ri]);
+      for (let k = 0; k < z; k++) {
+        const d = Math.abs(x - fibreX(L, L.xs[ti], k, z));
+        if (d < bestD) { bestD = d; best = { ti, slot: k }; }
+      }
+    }
+    if (!best || bestD > L.colW / 2 + 5) return { kind: 'none' };
+    return { kind: 'cell', ti: best.ti, ri, slot: best.slot, col: col >= 0 ? col : best.ti };
   }
   if (y >= L.numTop && y < L.numTop + L.numH) {
     // Gaps get a zone either side of the boundary; numbers get the rest.

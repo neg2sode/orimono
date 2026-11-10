@@ -3,13 +3,13 @@ import '@fontsource/space-grotesk/500.css';
 import '@fontsource/space-grotesk/600.css';
 import './style.css';
 
-import { BPM_MAX, BPM_MIN, DEFAULT_VELOCITY, ROWS, threadSeconds, type RowTag } from './constants';
+import { BPM_MAX, BPM_MIN, DEFAULT_VELOCITY, MAX_ZOOM, ROWS, threadSeconds, type RowTag } from './constants';
 import { Engine, type RowMix } from './audio';
 import { History } from './history';
 import { LABEL_W, computeLayout, dropIndex, hitTest, inNumberLane, touchStripTarget, type Layout, type Target } from './layout';
 import {
   clearRect, copyRect, deleteCell, deleteGroups, duplicateGroups, fresh, getHit, insertAfter, insertFront,
-  insertBack, isBoundary, merge, mergeGroups, moveGroups, parse, pasteClip, recolour, runs, setBpm, setHit, split, type Clip, type Pattern, type Rect,
+  insertBack, isBoundary, merge, mergeGroups, moveGroups, parse, pasteClip, recolour, runs, setBpm, setHit, split, zoomOf, zoomPlan, zoomRect, type Clip, type Pattern, type Rect,
 } from './model';
 import { STYLES, randomFillStyled } from './random';
 import { Renderer, type ViewState } from './render';
@@ -183,6 +183,84 @@ $('random').onclick = (e) => {
   view.glowRect = selRect();
 };
 $('clear').onclick = doClearRect;
+
+// ---------------------------------------------------------------- zoom (fibre · thread · fabric)
+
+/** A yes/no question in the app's own style. Resolves true for yes. */
+function ask(text: string, yes: string): Promise<boolean> {
+  const dlg = $<HTMLDialogElement>('ask');
+  $('ask-text').textContent = text;
+  $('ask-yes').textContent = yes;
+  dlg.returnValue = 'no';
+  dlg.showModal();
+  return new Promise((resolve) => dlg.addEventListener('close', () => resolve(dlg.returnValue === 'yes'), { once: true }));
+}
+
+const times = (n: number) => `×${n}`;
+
+/** Split the selected cells into m fibres each (1 removes the zoom). Asks only if notes would go. */
+async function doZoom(m: number) {
+  const r = selRect();
+  if (!r) return;
+  const plan = zoomPlan(pattern(), r, m);
+  if (!plan.changed) return;
+  if (plan.lost) {
+    const notes = `${plan.lost} note${plan.lost === 1 ? '' : 's'} between the beats will be cleared.`;
+    const from = plan.from.map(times).join(' and ');
+    const ok = await ask(m === 1 ? `Remove the ${from} zoom here? ${notes}` : `Change ${from} to ${times(m)} here? ${notes}`, m === 1 ? 'Remove zoom' : `Change to ${times(m)}`);
+    if (!ok) return;
+  }
+  history.apply(zoomRect(pattern(), r, m));
+  showActions();
+}
+
+{
+  const pop = $('zoom-pop');
+  const close = () => { pop.hidden = true; };
+  const open = (build: () => void) => {
+    const was = pop.dataset.for;
+    const wasOpen = !pop.hidden;
+    pop.replaceChildren();
+    build();
+    pop.hidden = wasOpen && was === pop.dataset.for;
+  };
+  const note = (text: string) => {
+    const el = document.createElement('p');
+    el.textContent = text;
+    pop.append(el);
+  };
+  $('zoom-fibre').onclick = (e) => {
+    e.stopPropagation();
+    open(() => {
+      pop.dataset.for = 'fibre';
+      const r = selRect();
+      if (!r) return note('Fibres: pick some cells with Select first, then split each of them into finer steps here.');
+      // The zoom the selection has now, if it is the same everywhere.
+      let now: number | null = zoomOf(pattern(), r.t0, ROWS[r.r0]);
+      for (let ti = r.t0; ti <= r.t1; ti++) for (let ri = r.r0; ri <= r.r1; ri++) if (zoomOf(pattern(), ti, ROWS[ri]) !== now) now = null;
+      note('Split each selected cell into');
+      const grid = document.createElement('div');
+      grid.className = 'zoom-grid';
+      for (let m = 1; m <= MAX_ZOOM; m++) {
+        const b = button(times(m), () => { close(); void doZoom(m); });
+        if (m === now) b.classList.add('on');
+        b.title = m === 1 ? 'No fibres: back to plain threads' : `${m} fibres per thread`;
+        grid.append(b);
+      }
+      pop.append(grid);
+    });
+  };
+  $('zoom-fabric').onclick = (e) => {
+    e.stopPropagation();
+    open(() => {
+      pop.dataset.for = 'fabric';
+      note('Fabric: the whole pattern at a glance. Coming next.');
+    });
+  };
+  document.addEventListener('pointerdown', (e) => {
+    if (!pop.hidden && !(e.target as HTMLElement).closest('.zoom-wrap')) close();
+  });
+}
 $('undo').onclick = () => { history.undo(); clearSelection(); };
 $('redo').onclick = () => { history.redo(); clearSelection(); };
 $('tool-draw').onclick = () => setTool('draw');
@@ -431,8 +509,8 @@ function doPaste() {
 // ---------------------------------------------------------------- pointer gestures
 
 type Gesture =
-  | { kind: 'draw'; mode: 'fill' | 'erase'; x0: number; y0: number; last: string; timer: number; ti: number; ri: number; before: number | null }
-  | { kind: 'pluck'; ti: number; ri: number; x0: number; v0: number }
+  | { kind: 'draw'; mode: 'fill' | 'erase'; x0: number; y0: number; last: string; timer: number; ti: number; ri: number; slot: number; before: number | null }
+  | { kind: 'pluck'; ti: number; ri: number; slot: number; x0: number; v0: number }
   | { kind: 'rect'; ti: number; ri: number }
   | { kind: 'band-select'; anchor: number }
   | { kind: 'row-select'; anchor: number }
@@ -455,14 +533,14 @@ function preview(row: RowTag, v: number) {
   engine.play(row, v, undefined, true);
 }
 
-function paint(ti: number, ri: number, mode: 'fill' | 'erase') {
+function paint(ti: number, ri: number, slot: number, mode: 'fill' | 'erase') {
   const row = ROWS[ri];
-  const has = !!getHit(pattern(), ti, row);
+  const has = !!getHit(pattern(), ti, row, slot);
   if (mode === 'fill' && !has) {
-    history.apply(setHit(pattern(), ti, row, { v: DEFAULT_VELOCITY, mine: true }));
+    history.apply(setHit(pattern(), ti, row, { v: DEFAULT_VELOCITY, mine: true }, slot));
     preview(row, DEFAULT_VELOCITY);
   } else if (mode === 'erase' && has) {
-    history.apply(setHit(pattern(), ti, row, null));
+    history.apply(setHit(pattern(), ti, row, null, slot));
   }
 }
 
@@ -491,19 +569,19 @@ canvas.addEventListener('pointerdown', (e) => {
     if (selecting()) {
       view.groupSel = null;
       view.rowSel = null;
-      gesture = { kind: 'rect', ti: t.ti, ri: t.ri };
-      view.rect = { t0: t.ti, t1: t.ti, r0: t.ri, r1: t.ri };
+      gesture = { kind: 'rect', ti: t.col, ri: t.ri };
+      view.rect = { t0: t.col, t1: t.col, r0: t.ri, r1: t.ri };
       showActions();
       return;
     }
     clearSelection();
     history.begin();
     const row = ROWS[t.ri];
-    const before = getHit(pattern(), t.ti, row)?.v ?? null;
+    const before = getHit(pattern(), t.ti, row, t.slot)?.v ?? null;
     const mode = before === null ? 'fill' : 'erase';
-    paint(t.ti, t.ri, mode);
+    paint(t.ti, t.ri, t.slot, mode);
     gesture = {
-      kind: 'draw', mode, x0: x, y0: y, last: `${t.ti}:${t.ri}`, ti: t.ti, ri: t.ri, before,
+      kind: 'draw', mode, x0: x, y0: y, last: `${t.ti}:${t.ri}:${t.slot}`, ti: t.ti, ri: t.ri, slot: t.slot, before,
       timer: window.setTimeout(() => startPluck(), HOLD_MS),
     };
     return;
@@ -549,13 +627,14 @@ canvas.addEventListener('pointerdown', (e) => {
 
 function startPluck() {
   if (!gesture || gesture.kind !== 'draw') return;
-  const { ti, ri, before, x0 } = gesture;
+  const { ti, ri, slot, before, x0 } = gesture;
   const row = ROWS[ri];
   // Past the threshold the cell is guaranteed to hold a hit, whatever the first press did.
   const v0 = before ?? DEFAULT_VELOCITY;
-  history.apply(setHit(pattern(), ti, row, { v: v0, mine: true }));
-  gesture = { kind: 'pluck', ti, ri, x0, v0 };
-  view.hold = { threadId: pattern().threads[ti].id, ri, dx: 0 };
+  history.apply(setHit(pattern(), ti, row, { v: v0, mine: true }, slot));
+  gesture = { kind: 'pluck', ti, ri, slot, x0, v0 };
+  // Only a note on the string itself pulls the string; a fibre's seed bead just grows and shrinks.
+  view.hold = slot === 0 ? { threadId: pattern().threads[ti].id, ri, dx: 0 } : null;
 }
 
 canvas.addEventListener('pointermove', (e) => {
@@ -573,11 +652,11 @@ canvas.addEventListener('pointermove', (e) => {
   if (g.kind === 'draw') {
     if (Math.hypot(x - g.x0, y - g.y0) > MOVE_TOLERANCE) window.clearTimeout(g.timer);
     if (t.kind === 'cell') {
-      const key = `${t.ti}:${t.ri}`;
+      const key = `${t.ti}:${t.ri}:${t.slot}`;
       if (key !== g.last) {
         window.clearTimeout(g.timer);
         g.last = key;
-        paint(t.ti, t.ri, g.mode);
+        paint(t.ti, t.ri, t.slot, g.mode);
       }
       view.hover = t;
     }
@@ -588,12 +667,12 @@ canvas.addEventListener('pointermove', (e) => {
     if (view.hold) view.hold.dx = pull;
     if (Math.abs(dx) > 3) {
       const v = Math.max(0.12, Math.min(1, Math.abs(dx) / 70));
-      history.apply(setHit(pattern(), g.ti, ROWS[g.ri], { v, mine: true }));
+      history.apply(setHit(pattern(), g.ti, ROWS[g.ri], { v, mine: true }, g.slot));
     }
   } else if (g.kind === 'rect') {
     if (t.kind === 'cell') {
       view.rect = {
-        t0: Math.min(g.ti, t.ti), t1: Math.max(g.ti, t.ti), r0: Math.min(g.ri, t.ri), r1: Math.max(g.ri, t.ri),
+        t0: Math.min(g.ti, t.col), t1: Math.max(g.ti, t.col), r0: Math.min(g.ri, t.ri), r1: Math.max(g.ri, t.ri),
       };
       showActions();
     }
@@ -625,7 +704,7 @@ function endGesture(e: PointerEvent) {
     window.clearTimeout(g.timer);
     history.end();
   } else if (g.kind === 'pluck') {
-    const hit = getHit(pattern(), g.ti, ROWS[g.ri]);
+    const hit = getHit(pattern(), g.ti, ROWS[g.ri], g.slot);
     const v = hit?.v ?? g.v0;
     engine.play(ROWS[g.ri], v, undefined, true);
     const id = pattern().threads[g.ti].id;
@@ -667,7 +746,7 @@ window.addEventListener('keydown', (e) => {
   const el = e.target as HTMLInputElement;
   if (el.tagName === 'INPUT' && el.type !== 'range') return; // typing; a fader still lets Space play
   if (el.type === 'range' && e.code !== 'Space') return;
-  if ($<HTMLDialogElement>('credits').open) return;
+  if ($<HTMLDialogElement>('credits').open || $<HTMLDialogElement>('ask').open) return;
   const mod = e.metaKey || e.ctrlKey;
   if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
   else if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? history.redo() : history.undo(); clearSelection(); }
@@ -680,6 +759,7 @@ window.addEventListener('keydown', (e) => {
     if (view.groupSel) doDeleteGroups();
     else if (selRect()) doClearRect(); // the key never clears everything; the Clear button can
   }
+  else if (/^[1-9]$/.test(e.key) && selRect()) void doZoom(Number(e.key)); // 1 removes the zoom
   else if (e.key.toLowerCase() === 'd') setTool('draw');
   else if (e.key.toLowerCase() === 's') setTool('select');
   else if (e.key.toLowerCase() === 'm') doMergeGroups();
@@ -700,15 +780,21 @@ function frame() {
   if (stripAnchor && !gesture) view.hover = hitTest(layout, p, stripAnchor.x, stripAnchor.y);
   const cell = threadSeconds(p.bpm);
   for (const f of scheduler.due()) {
-    view.playheadId = f.threadId;
-    if (f.hits.length) {
-      const v = Math.max(...f.hits.map((h) => h.v));
-      const cells = Math.max(0.7, ...f.hits.map((h) => SWING_CELLS[h.row] ?? 0.7));
+    if (f.start) view.playheadId = f.threadId;
+    for (const h of f.hits) if (h.zoom > 1) renderer.pop(f.threadId, h.row, h.slot);
+    const onString = f.hits.filter((h) => h.slot === 0); // fibre notes don't swing the string
+    if (onString.length) {
+      const v = Math.max(...onString.map((h) => h.v));
+      const cells = Math.max(0.7, ...onString.map((h) => SWING_CELLS[h.row] ?? 0.7));
       const tau = Math.min(0.35, (cells * cell) / 2.5); // decays to ~8% within `cells` cells
       const freq = Math.max(3, Math.min(16, 1.2 / (cells * cell))); // about one swing per wobble
       renderer.pluck(f.threadId, 0.8 + 2.2 * v, tau, freq);
     }
   }
+  // The zoom diagram hints where you can go: into fibres with a selection, out to fabric without.
+  const hasSel = !!selRect();
+  $('zoom-fibre').classList.toggle('lit', hasSel);
+  $('zoom-fabric').classList.toggle('lit', !hasSel);
   const anySolo = ROWS.some((t) => mix[t]?.solo);
   const quiet = ROWS.map((t) => !!mix[t]?.mute || (anySolo && !mix[t]?.solo));
   renderer.draw(p, layout, { ...view, rect: selRect(), quiet });

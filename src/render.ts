@@ -1,7 +1,7 @@
 // Drawing (§11): each thread is a vertical string in its group's colour, hits are beads whose
 // size is their velocity, and strings wobble when the playhead plucks them.
 
-import { LABEL_W, gapX, rowY, type Layout, type Target } from './layout';
+import { LABEL_W, fibreX, gapX, rowY, type Layout, type Target } from './layout';
 import { PALETTE, ROWS, UI } from './constants';
 import type { Pattern, Rect } from './model';
 
@@ -35,6 +35,7 @@ export class Renderer {
   private xNow = new Map<number, number>(); // animated x per thread id
   private alpha = new Map<number, number>(); // fade-in for new strings
   private wobble = new Map<number, Wobble>();
+  private pops = new Map<string, number>(); // seed beads that just played: "thread:row:slot" → time
   private last = performance.now();
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -45,6 +46,12 @@ export class Renderer {
   pluck(threadId: number, amp: number, tau: number, freq: number) {
     if (reducedMotion()) return;
     this.wobble.set(threadId, { amp, t0: performance.now() / 1000, freq, tau });
+  }
+
+  /** A seed bead (a note on a fibre) was just played: it swells for a moment. */
+  pop(threadId: number, row: string, slot: number) {
+    if (reducedMotion()) return;
+    this.pops.set(`${threadId}:${row}:${slot}`, performance.now());
   }
 
   private displacement(threadId: number, u: number, now: number): number {
@@ -99,7 +106,7 @@ export class Renderer {
 
     // Group tint behind each group, a little stronger when selected.
     L.runs.forEach((r, i) => {
-      const x0 = xs[r.start] - L.colW / 2, x1 = xs[r.end - 1] + L.colW / 2;
+      const x0 = xs[r.start] - L.colW / 2, x1 = xs[r.end - 1] + L.colW / 2 + (i === L.runs.length - 1 ? L.tail : 0);
       const sel = s.groupSel && i >= s.groupSel[0] && i <= s.groupSel[1];
       ctx.globalAlpha = sel ? 0.13 : 0.045;
       ctx.fillStyle = PALETTE[r.colour].hex;
@@ -117,7 +124,7 @@ export class Renderer {
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(LABEL_W - 6, Math.round(y) + 0.5);
-      ctx.lineTo(xs[xs.length - 1] + L.colW / 2, Math.round(y) + 0.5);
+      ctx.lineTo(xs[xs.length - 1] + L.colW / 2 + L.tail, Math.round(y) + 0.5);
       ctx.stroke();
       const hot = ((s.hover.kind === 'cell' || s.hover.kind === 'label') && s.hover.ri === ri)
         || (!!s.rowSel && ri >= s.rowSel[0] && ri <= s.rowSel[1]);
@@ -169,43 +176,67 @@ export class Renderer {
       ctx.stroke();
       ROWS.forEach((row, ri) => {
         const y = rowY(L, ri);
-        const x = xs[ti] + off(y);
-        const hit = t.lanes[row]?.slots[0];
-        ctx.fillStyle = colour;
-        if (hit) {
-          ctx.globalAlpha = a;
+        const lane = t.lanes[row];
+        const z = lane?.zoom ?? 1;
+        const gr = s.glowRect;
+        const inGlow = !gr || (ti >= gr.t0 && ti <= gr.t1 && ri >= gr.r0 && ri <= gr.r1);
+        // A zoomed cell: its fibres are short, fine strings after the main one, each at its
+        // true moment, carrying seed beads (smaller, so twelve fit in a column).
+        const seedR = z > 1 ? Math.max(1.8, Math.min(rMax * 0.62, (L.colW / z) * 0.42)) : rMax;
+        if (z > 1) {
+          ctx.globalAlpha = a * 0.38;
+          ctx.strokeStyle = colour;
+          ctx.lineWidth = 1;
           ctx.beginPath();
-          const r = rMax * (0.42 + 0.58 * hit.v);
-          ctx.arc(x, y, r, 0, Math.PI * 2);
-          ctx.fill();
-          const gr = s.glowRect;
-          const inGlow = !gr || (ti >= gr.t0 && ti <= gr.t1 && ri >= gr.r0 && ri <= gr.r1);
-          if (hit.mine && glow > 0 && inGlow) {
-            ctx.globalAlpha = a * glow;
-            ctx.strokeStyle = UI.text;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(x, y, r + 3 + 4 * (1 - glow), 0, Math.PI * 2);
-            ctx.stroke();
+          const h = L.rowH * 0.3;
+          for (let k = 1; k < z; k++) {
+            const fx = Math.round(fibreX(L, xs[ti], k, z)) + 0.5;
+            ctx.moveTo(fx, y - h);
+            ctx.lineTo(fx, y + h);
           }
-        } else {
-          ctx.globalAlpha = a * 0.4;
-          ctx.beginPath();
-          ctx.arc(x, y, 1.6, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.stroke();
+        }
+        for (let k = 0; k < z; k++) {
+          const hit = lane?.slots[k];
+          const x = k === 0 ? xs[ti] + off(y) : fibreX(L, xs[ti], k, z);
+          ctx.fillStyle = colour;
+          if (hit) {
+            const popped = z > 1 ? this.pops.get(`${t.id}:${row}:${k}`) : undefined;
+            const swell = popped === undefined ? 1 : 1 + 0.6 * Math.exp(-(nowMs - popped) / 90);
+            ctx.globalAlpha = a;
+            ctx.beginPath();
+            const r = seedR * (0.42 + 0.58 * hit.v) * swell;
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fill();
+            if (hit.mine && glow > 0 && inGlow) {
+              ctx.globalAlpha = a * glow;
+              ctx.strokeStyle = UI.text;
+              ctx.lineWidth = z > 1 ? 1.5 : 2;
+              ctx.beginPath();
+              ctx.arc(x, y, r + 3 + 4 * (1 - glow), 0, Math.PI * 2);
+              ctx.stroke();
+            }
+          } else if (k === 0) {
+            ctx.globalAlpha = a * 0.4;
+            ctx.beginPath();
+            ctx.arc(x, y, 1.6, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
       });
       ctx.globalAlpha = 1;
     });
+    for (const [key, t0] of this.pops) if (nowMs - t0 > 600) this.pops.delete(key);
 
     // Hover ring on the cell under the pointer (Draw tool).
     if (s.hover.kind === 'cell' && !s.hold) {
-      const x = xs[s.hover.ti], y = rowY(L, s.hover.ri);
+      const hz = p.threads[s.hover.ti]?.lanes[ROWS[s.hover.ri]]?.zoom ?? 1;
+      const x = fibreX(L, xs[s.hover.ti], s.hover.slot, hz), y = rowY(L, s.hover.ri);
       ctx.strokeStyle = UI.text;
       ctx.globalAlpha = 0.5;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(x, y, rMax + 2, 0, Math.PI * 2);
+      ctx.arc(x, y, hz > 1 ? Math.max(3.5, Math.min(rMax * 0.62, (L.colW / hz) * 0.42) + 2) : rMax + 2, 0, Math.PI * 2);
       ctx.stroke();
       ctx.globalAlpha = 1;
     }

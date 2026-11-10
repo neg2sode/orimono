@@ -2,7 +2,7 @@
 // Every edit is a pure function: it returns a new pattern and never changes the old one,
 // so undo is just keeping old patterns. (Design plan §4, §7, §9.)
 
-import { DEFAULT_BPM, MAX_THREADS, MIN_THREADS, PALETTE, REST_BIRTHS, ROWS, SHELF_ORDER, type RowTag } from './constants';
+import { DEFAULT_BPM, MAX_THREADS, MAX_ZOOM, MIN_THREADS, PALETTE, REST_BIRTHS, ROWS, SHELF_ORDER, type RowTag } from './constants';
 import { colourDistance } from './colour';
 
 export interface Hit {
@@ -16,7 +16,7 @@ const keepHit = (h: Hit): Hit => (h.mine ? { v: clamp01(h.v), mine: true } : { v
 
 /**
  * One instrument on one thread. `zoom` is the number of fibres (1 = not zoomed),
- * `slots` has exactly `zoom` entries. Always zoom 1 in the MVP; stored from day one (§12).
+ * `slots` has exactly `zoom` entries; slot k plays k/zoom of the way through the thread (§8.2).
  */
 export interface Lane {
   zoom: number;
@@ -165,17 +165,21 @@ export function setHit(p: Pattern, ti: number, row: RowTag, hit: Hit | null, slo
   if (!p.threads[ti]) return p;
   const q = clone(p);
   const t = q.threads[ti];
-  laneFor(t, row).slots[slot] = hit ? keepHit(hit) : null;
+  const lane = laneFor(t, row);
+  if (slot >= lane.zoom) return p;
+  lane.slots[slot] = hit ? keepHit(hit) : null;
   pruneLane(t, row);
   return q;
 }
 
-export function setHits(p: Pattern, cells: { ti: number; row: RowTag; hit: Hit | null }[]): Pattern {
+export function setHits(p: Pattern, cells: { ti: number; row: RowTag; hit: Hit | null; slot?: number }[]): Pattern {
   const q = clone(p);
   for (const c of cells) {
     const t = q.threads[c.ti];
     if (!t) continue;
-    laneFor(t, c.row).slots[0] = c.hit ? keepHit(c.hit) : null;
+    const lane = laneFor(t, c.row);
+    const k = c.slot ?? 0;
+    if (k < lane.zoom) lane.slots[k] = c.hit ? keepHit(c.hit) : null;
     pruneLane(t, c.row);
   }
   return q;
@@ -193,7 +197,72 @@ export function clearRect(p: Pattern, r: Rect): Pattern {
   for (let ti = r.t0; ti <= r.t1; ti++) {
     const t = q.threads[ti];
     if (!t) continue;
-    for (let ri = r.r0; ri <= r.r1; ri++) delete t.lanes[ROWS[ri]];
+    for (let ri = r.r0; ri <= r.r1; ri++) {
+      // Clearing removes notes, not structure: a zoomed cell stays zoomed, just empty.
+      const lane = t.lanes[ROWS[ri]];
+      if (lane && lane.zoom > 1) lane.slots.fill(null);
+      else delete t.lanes[ROWS[ri]];
+    }
+  }
+  return q;
+}
+
+// ---------------------------------------------------------------- zoom: threads into fibres (§8.2)
+
+export const zoomOf = (p: Pattern, ti: number, row: RowTag) => p.threads[ti]?.lanes[row]?.zoom ?? 1;
+
+/**
+ * One cell asked to become ×m. Returns its new slots, or null when nothing changes.
+ * One zoom per cell, never stacked:
+ *  - ×1 removes the zoom (notes between the beats go);
+ *  - a factor the cell's zoom already contains (×2 asked of a ×6 cell, or the same factor)
+ *    changes nothing: the finer zoom stays;
+ *  - a multiple of the cell's zoom (×2 → ×6) keeps every note;
+ *  - anything else (×2 → ×3) keeps the notes that sit exactly on the new fibres.
+ */
+function rezoom(lane: Lane | undefined, m: number): { slots: (Hit | null)[]; lost: number; from: number } | null {
+  const z0 = lane?.zoom ?? 1;
+  if (m === z0 || (m !== 1 && z0 % m === 0)) return null;
+  const slots: (Hit | null)[] = new Array(m).fill(null);
+  let lost = 0;
+  lane?.slots.forEach((h, k) => {
+    if (!h) return;
+    if ((k * m) % z0 === 0) slots[(k * m) / z0] = h;
+    else lost++;
+  });
+  return { slots, lost, from: z0 };
+}
+
+/** What zooming the area to ×m would do, before doing it (for the "notes will be cleared" question). */
+export function zoomPlan(p: Pattern, r: Rect, m: number): { changed: number; lost: number; from: number[] } {
+  let changed = 0, lost = 0;
+  const from = new Set<number>();
+  for (let ti = r.t0; ti <= r.t1; ti++) {
+    for (let ri = r.r0; ri <= r.r1; ri++) {
+      const z = rezoom(p.threads[ti]?.lanes[ROWS[ri]], m);
+      if (!z) continue;
+      changed++;
+      lost += z.lost;
+      if (z.lost) from.add(z.from);
+    }
+  }
+  return { changed, lost, from: [...from].sort((a, b) => a - b) };
+}
+
+/** Split every cell of the area into m fibres (m = 1 removes the zoom). One undo step. */
+export function zoomRect(p: Pattern, r: Rect, m: number): Pattern {
+  if (!Number.isInteger(m) || m < 1 || m > MAX_ZOOM) return p;
+  const q = clone(p);
+  for (let ti = r.t0; ti <= r.t1; ti++) {
+    const t = q.threads[ti];
+    if (!t) continue;
+    for (let ri = r.r0; ri <= r.r1; ri++) {
+      const row = ROWS[ri];
+      const z = rezoom(t.lanes[row], m);
+      if (!z) continue;
+      t.lanes[row] = { zoom: m, slots: z.slots };
+      pruneLane(t, row);
+    }
   }
   return q;
 }

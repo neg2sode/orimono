@@ -3,6 +3,7 @@ import { PALETTE } from './constants';
 import {
   clearRect, copyRect, deleteCell, deleteGroups, duplicateGroups, fresh, getHit, insertAfter, insertBack, insertFront, setBpm,
   isBoundary, merge, mergeGroups, moveGroups, pasteClip, recolour, runs, setHit, split, type Pattern,
+  clearRect as clearCells, zoomOf, zoomPlan, zoomRect,
 } from './model';
 import { colourDistance } from './colour';
 
@@ -197,5 +198,60 @@ describe('recolour with the Draw tool', () => {
     const c = runs(q)[1].colour;
     const score = (x: number) => (colourDistance(x, 0) + colourDistance(x, 2)) / 2;
     for (const other of [4, 5, 6, 7, 8, 9, 10, 11, 12]) expect(score(c)).toBeLessThanOrEqual(score(other) + 1e-9);
+  });
+});
+
+describe('zoom: threads into fibres (§8.2, scenario 10)', () => {
+  const cell = { t0: 0, t1: 0, r0: 16, r1: 16 }; // one kick cell
+  const kick = (p: ReturnType<typeof fresh>) => p.threads[0].lanes.BD;
+
+  it('splits a cell; its note stays on the beat', () => {
+    const p = zoomRect(setHit(fresh(), 0, 'BD', { v: 0.8 }), cell, 3);
+    expect(kick(p)).toEqual({ zoom: 3, slots: [{ v: 0.8 }, null, null] });
+    expect(zoomOf(p, 1, 'BD')).toBe(1);
+  });
+
+  it('×2 → ×6 just happens and keeps every note', () => {
+    let p = zoomRect(fresh(), cell, 2);
+    p = setHit(p, 0, 'BD', { v: 0.5 }, 1); // halfway through the thread
+    expect(zoomPlan(p, cell, 6)).toEqual({ changed: 1, lost: 0, from: [] });
+    p = zoomRect(p, cell, 6);
+    expect(kick(p)?.zoom).toBe(6);
+    expect(kick(p)?.slots[3]).toEqual({ v: 0.5 }); // still halfway
+  });
+
+  it('asking ×2 of a ×6 cell changes nothing: the finer zoom stays', () => {
+    const p = zoomRect(fresh(), cell, 6);
+    expect(zoomPlan(p, cell, 2).changed).toBe(0);
+    expect(zoomRect(p, cell, 2)).toEqual(p);
+  });
+
+  it('×2 → ×3 keeps notes on the beat and counts the ones it would clear', () => {
+    let p = zoomRect(fresh(), cell, 2);
+    p = setHit(setHit(p, 0, 'BD', { v: 1 }, 0), 0, 'BD', { v: 0.5 }, 1);
+    expect(zoomPlan(p, cell, 3)).toEqual({ changed: 1, lost: 1, from: [2] });
+    p = zoomRect(p, cell, 3);
+    expect(kick(p)).toEqual({ zoom: 3, slots: [{ v: 1 }, null, null] });
+  });
+
+  it('×1 removes the zoom, and an empty plain cell is not stored', () => {
+    let p = zoomRect(fresh(), cell, 4);
+    p = setHit(p, 0, 'BD', { v: 0.5 }, 2);
+    expect(zoomPlan(p, cell, 1)).toEqual({ changed: 1, lost: 1, from: [4] });
+    p = zoomRect(p, cell, 1);
+    expect(kick(p)).toBeUndefined();
+    expect(zoomPlan(p, cell, 1).changed).toBe(0);
+  });
+
+  it('only the selected rows and threads are split, up to ×12', () => {
+    const p = zoomRect(fresh(), { t0: 2, t1: 3, r0: 15, r1: 16 }, 12);
+    expect([zoomOf(p, 1, 'BD'), zoomOf(p, 2, 'BD'), zoomOf(p, 3, 'SD'), zoomOf(p, 4, 'SD'), zoomOf(p, 2, 'FT')]).toEqual([1, 12, 12, 1, 1]);
+    expect(zoomRect(p, cell, 13)).toBe(p);
+  });
+
+  it('Clear empties a zoomed cell but leaves it zoomed', () => {
+    let p = zoomRect(fresh(), cell, 3);
+    p = clearCells(setHit(p, 0, 'BD', { v: 0.5 }, 2), cell);
+    expect(kick(p)).toEqual({ zoom: 3, slots: [null, null, null] });
   });
 });

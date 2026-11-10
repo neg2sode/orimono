@@ -24,6 +24,8 @@ export class Engine {
   private master: GainNode;
   private rows = new Map<RowTag, Row>();
   private voices = new Map<RowTag, Voice>();
+  /** Every booked or sounding voice, so Stop can silence hits that haven't started yet. */
+  private live = new Set<Voice>();
   private buses = new Map<RowTag, GainNode>();
   private mixState: Partial<Record<RowTag, RowMix>> = {};
 
@@ -126,7 +128,9 @@ export class Engine {
     src.start(startAt, offset);
     const voice = { src, gain, base };
     this.voices.set(tag, voice);
+    this.live.add(voice);
     src.onended = () => {
+      this.live.delete(voice);
       if (this.voices.get(tag) === voice) this.voices.delete(tag);
       src.disconnect();
       gain.disconnect();
@@ -165,7 +169,17 @@ export class Engine {
   /** Stop everything right now (Stop button). */
   silence() {
     const now = this.ctx.currentTime;
-    for (const tag of [...this.voices.keys()]) this.choke(tag, now);
+    for (const v of this.live) {
+      v.gain.gain.cancelScheduledValues(now);
+      v.gain.gain.setTargetAtTime(0, now, 0.002);
+      try {
+        v.src.stop(now + 0.02);
+      } catch {
+        /* already stopped */
+      }
+    }
+    this.live.clear();
+    this.voices.clear();
   }
 }
 

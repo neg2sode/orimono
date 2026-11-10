@@ -126,3 +126,37 @@ button:focus:not(:focus-visible) { outline: none; }
   font-size: 11px; color: var(--secondary); opacity: 0; transition: opacity 0.4s; pointer-events: none;
 }
 #style-tag.show { opacity: 1; transition: opacity 0.1s; }
+
+/* Zoom: a small diagram of fibres running into a thread running into fabric. The middle is
+   where you are; a side lights up when you can go that way. */
+.zoom-wrap { position: relative; display: flex; }
+.zoom { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.zoom button { border: none; border-radius: 0; padding: 2px 6px; display: flex; color: var(--border); }
+.zoom button.lit { color: var(--caramel); }
+.zoom button:hover { color: var(--text); background: #ffffff0d; }
+.zoom svg { height: 28px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
+.zoom #zoom-fibre svg, .zoom #zoom-fabric svg { width: 36px; }
+.zoom-thread { display: flex; color: var(--text); }
+.zoom-thread svg { width: 24px; stroke-width: 2; }
+.zoom-thread circle { fill: currentColor; stroke: none; }
+#zoom-pop {
+  position: absolute; top: calc(100% + 8px); left: 0; z-index: 5; width: 232px;
+  background: var(--panel); border: 1px solid #00000060; border-radius: 8px; box-shadow: 0 6px 18px #0008;
+  padding: 10px 12px; font-size: 13px;
+}
+#zoom-pop[hidden] { display: none; }
+#zoom-pop p { margin: 0; line-height: 1.4; color: var(--secondary); }
+.zoom-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-top: 8px; }
+.zoom-grid button { padding: 6px 0; font-size: 12px; }
+.zoom-grid button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+#ask {
+  max-width: 380px; color: var(--text); background: var(--panel); border: 1px solid #00000060;
+  border-radius: 10px; padding: 18px 20px; font-size: 14px; line-height: 1.5;
+}
+#ask::backdrop { background: #0008; }
+#ask p { margin: 0 0 14px; }
+#ask form { display: flex; gap: 8px; justify-content: flex-end; }
+@media (pointer: coarse) {
+  .zoom button { padding: 6px 8px; }
+  .zoom-grid button { min-height: 40px; }
+}

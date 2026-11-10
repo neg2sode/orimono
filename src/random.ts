@@ -5,7 +5,7 @@
 // so each style follows whatever structure is on screen. Each press picks a style.
 
 import { ROWS, type RowTag } from './constants';
-import { getHit, runs, setHits, type Hit, type Pattern, type Rect } from './model';
+import { getHit, runs, setHits, zoomOf, type Hit, type Pattern, type Rect } from './model';
 
 type Rng = () => number;
 /** One note inside a group: position from the group start, row, strength. */
@@ -161,6 +161,10 @@ const RHYME_CHANCE = 0.35;
 /**
  * Fill the pattern (or the selection) with a style. Without a selection, rows holding any of the
  * user's own notes are left alone. With a selection, Random fills around the user's notes there.
+ *
+ * Random works at one level at a time, never across both. Normally that is the threads: cells
+ * split into fibres are left exactly as they are. When every selected cell is split into fibres,
+ * it works on the fibres instead (see fibreFill).
  */
 export function randomFill(p: Pattern, area: Rect | null, rng: Rng = Math.random, styles?: number[]): Pattern {
   return randomFillStyled(p, area, rng, styles).pattern;
@@ -183,22 +187,66 @@ export function randomFillStyled(p: Pattern, area: Rect | null, rng: Rng = Math.
   };
 
   // Rows Random may write: without a selection, rows with the user's notes are theirs.
-  const mineAt = (ti: number, row: RowTag) => !!getHit(p, ti, row)?.mine;
+  const mineAt = (ti: number, row: RowTag) => !!p.threads[ti]?.lanes[row]?.slots.some((h) => h?.mine);
   const ownRows = new Set<RowTag>(area ? [] : ROWS.filter((r) => p.threads.some((_, ti) => mineAt(ti, r))));
 
   // A style that has something to say inside the area (a selected cowbell row gets nothing from
   // "Busy", so that press moves on to another style).
   const order = styles ?? shuffle(STYLES.map((_, i) => i), rng);
+
+  const selectedRows = ROWS.filter(inRows);
+  const allFibres = !!area && selectedRows.length > 0 && selectedRows.every((row) => {
+    for (let ti = rect.t0; ti <= rect.t1; ti++) if (zoomOf(p, ti, row) === 1) return false;
+    return true;
+  });
+  if (allFibres) return fibreFill(p, rect, selectedRows, order, t, rng);
+
   for (const si of order) {
     const notes = compose(p, STYLES[si], t, rng);
     const cells: { ti: number; row: RowTag; hit: Hit | null }[] = [];
     let some = false;
     for (let ti = rect.t0; ti <= rect.t1; ti++) {
       for (const row of ROWS) {
-        if (!inRows(row) || ownRows.has(row) || mineAt(ti, row)) continue;
+        if (!inRows(row) || ownRows.has(row) || mineAt(ti, row) || zoomOf(p, ti, row) > 1) continue;
         const v = notes.get(`${ti}:${row}`);
         if (v !== undefined) some = true;
         cells.push({ ti, row, hit: v === undefined ? null : { v } });
+      }
+    }
+    if (some || si === order[order.length - 1]) return { pattern: setHits(p, cells), style: si };
+  }
+  return { pattern: p, style: -1 };
+}
+
+/**
+ * Random on fibres. The groups stay the groups, and the fibres become the cells: a group of
+ * 4 threads at ×3 is treated as a group of 12, so a style's "start, middle, end" still follow
+ * the user's structure, only finer (steady hats become triplets, a fill becomes a roll).
+ * Rows with different zooms are each filled on their own grid, in the same style.
+ */
+function fibreFill(p: Pattern, rect: Rect, rows: RowTag[], order: number[], t: Tools, rng: Rng) {
+  const zooms = new Set<number>();
+  for (const row of rows) for (let ti = rect.t0; ti <= rect.t1; ti++) zooms.add(zoomOf(p, ti, row));
+  for (const si of order) {
+    const cells: { ti: number; row: RowTag; hit: Hit | null; slot: number }[] = [];
+    let some = false;
+    for (const z of zooms) {
+      // The selected threads with every thread drawn out into z cells, still in its own group.
+      const fine: Pattern = { ...p, threads: [] };
+      for (let ti = rect.t0; ti <= rect.t1; ti++) {
+        for (let k = 0; k < z; k++) fine.threads.push({ id: -1 - fine.threads.length, group: p.threads[ti].group, lanes: {} });
+      }
+      const notes = compose(fine, STYLES[si], t, rng);
+      for (let ti = rect.t0; ti <= rect.t1; ti++) {
+        for (const row of rows) {
+          if (zoomOf(p, ti, row) !== z) continue;
+          for (let k = 0; k < z; k++) {
+            if (getHit(p, ti, row, k)?.mine) continue;
+            const v = notes.get(`${(ti - rect.t0) * z + k}:${row}`);
+            if (v !== undefined) some = true;
+            cells.push({ ti, row, slot: k, hit: v === undefined ? null : { v } });
+          }
+        }
       }
     }
     if (some || si === order[order.length - 1]) return { pattern: setHits(p, cells), style: si };

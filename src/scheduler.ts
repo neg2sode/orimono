@@ -1,6 +1,8 @@
 // Lookahead scheduler (§10.4): a timer wakes every ~25 ms and books every hit due in the next
-// ~100 ms on the audio clock. It reads the live pattern each time, so edits apply while playing.
-// The playhead remembers which thread is next by id: if that thread is deleted, it carries on
+// ~150 ms on the audio clock. It reads the live pattern each time, so edits apply while playing.
+// A thread's fibres are booked as their moments come up, not all at once, and always in time
+// order (a hit chokes whatever its row booked before it, so order matters).
+// The playhead remembers which thread it is on by id: if that thread is deleted, it carries on
 // from whichever thread now sits in its place.
 
 import { ROWS, threadSeconds, type RowTag } from './constants';
@@ -10,19 +12,23 @@ import type { Pattern } from './model';
 const WAKE_MS = 25;
 const AHEAD_S = 0.15; // must exceed the longest sample lead-in (≤ 0.12 s)
 
+/** Hits that share one moment. `start` marks the first moment of a thread (the playhead moves). */
 export interface Fired {
   time: number; // audio time
   threadId: number;
+  start: boolean;
   hits: { row: RowTag; v: number; slot: number; zoom: number }[];
 }
 
 export class Scheduler {
   playing = false;
   private timer = 0;
-  private nextIdx = 0;
-  private nextId = -1;
-  private nextTime = 0;
-  /** Threads already booked, waiting for their moment, for the playhead and string plucks. */
+  private idx = 0;
+  private id = -1;
+  /** When the current thread starts, and how much of it (0–1) is already booked. */
+  private threadTime = 0;
+  private booked = 0;
+  /** Moments already booked, waiting for their time, for the playhead and string plucks. */
   private queue: Fired[] = [];
 
   constructor(private engine: Engine, private pattern: () => Pattern) {}
@@ -32,9 +38,10 @@ export class Scheduler {
     this.engine.resume();
     const p = this.pattern();
     this.playing = true;
-    this.nextIdx = 0;
-    this.nextId = p.threads[0].id;
-    this.nextTime = this.engine.ctx.currentTime + 0.06;
+    this.idx = 0;
+    this.id = p.threads[0].id;
+    this.threadTime = this.engine.ctx.currentTime + 0.06;
+    this.booked = 0;
     this.tick();
     this.timer = window.setInterval(() => this.tick(), WAKE_MS);
   }
@@ -48,36 +55,54 @@ export class Scheduler {
 
   private tick() {
     const p = this.pattern();
-    const ctx = this.engine.ctx;
+    const now = this.engine.ctx.currentTime;
     // If audio fell far behind (tab was asleep), jump forward rather than play a burst.
-    if (this.nextTime < ctx.currentTime - 0.2) this.nextTime = ctx.currentTime + 0.02;
-    while (this.nextTime < ctx.currentTime + AHEAD_S) {
+    if (this.threadTime + this.booked * threadSeconds(p.bpm) < now - 0.2) {
+      this.threadTime = now + 0.02;
+      this.booked = 0;
+    }
+    const horizon = now + AHEAD_S;
+    for (;;) {
       const n = p.threads.length;
-      if (p.threads[this.nextIdx]?.id !== this.nextId) {
-        const found = p.threads.findIndex((t) => t.id === this.nextId);
-        this.nextIdx = found >= 0 ? found : this.nextIdx % n;
+      if (p.threads[this.idx]?.id !== this.id) {
+        const found = p.threads.findIndex((t) => t.id === this.id);
+        this.idx = found >= 0 ? found : this.idx % n;
+        this.id = p.threads[this.idx].id;
       }
-      const thread = p.threads[this.nextIdx];
+      const thread = p.threads[this.idx];
       const dur = threadSeconds(p.bpm);
-      const fired: Fired = { time: this.nextTime, threadId: thread.id, hits: [] };
+      // Book the part of this thread, as a fraction, that falls inside the lookahead window.
+      const upTo = Math.min(1, (horizon - this.threadTime) / dur);
+      if (upTo <= this.booked) break;
+      const moments = new Map<number, Fired>();
+      const at = (f: number) => {
+        let m = moments.get(f);
+        if (!m) moments.set(f, (m = { time: this.threadTime + f * dur, threadId: thread.id, start: f === 0, hits: [] }));
+        return m;
+      };
+      if (this.booked === 0) at(0);
       for (const row of ROWS) {
         const lane = thread.lanes[row];
         if (!lane) continue;
         lane.slots.forEach((hit, k) => {
-          if (!hit) return;
-          // Exact position inside the thread: k / zoom (zoom is 1 in the MVP).
-          this.engine.play(row, hit.v, this.nextTime + (dur * k) / lane.zoom);
-          fired.hits.push({ row, v: hit.v, slot: k, zoom: lane.zoom });
+          const f = k / lane.zoom; // exact position inside the thread
+          if (hit && f >= this.booked && f < upTo) at(f).hits.push({ row, v: hit.v, slot: k, zoom: lane.zoom });
         });
       }
-      this.queue.push(fired);
-      this.nextTime += dur;
-      this.nextIdx = (this.nextIdx + 1) % n;
-      this.nextId = p.threads[this.nextIdx].id;
+      for (const m of [...moments.values()].sort((a, b) => a.time - b.time)) {
+        for (const h of m.hits) this.engine.play(h.row, h.v, m.time);
+        this.queue.push(m);
+      }
+      this.booked = upTo;
+      if (upTo < 1) break;
+      this.threadTime += dur;
+      this.booked = 0;
+      this.idx = (this.idx + 1) % n;
+      this.id = p.threads[this.idx].id;
     }
   }
 
-  /** Threads whose moment has come since the last call (for the playhead and plucks). */
+  /** Moments whose time has come since the last call (for the playhead and plucks). */
   due(): Fired[] {
     const now = this.engine.ctx.currentTime;
     const out: Fired[] = [];

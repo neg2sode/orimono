@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deleteCell, fresh, getHit, insertAfter, runs, setHit } from './model';
+import { deleteCell, fresh, getHit, insertAfter, runs, setHit, zoomRect } from './model';
 import { STYLES, randomFill, randomFillStyled } from './random';
 
 function seeded(seed: number) {
@@ -71,5 +71,29 @@ describe('Random (scenario 6)', () => {
       const { pattern: q } = randomFillStyled(fresh(), { t0: 0, t1: 15, r0: 7, r1: 7 }, seeded(s)); // cowbell
       expect(q.threads.some((_, ti) => getHit(q, ti, 'CB'))).toBe(true);
     }
+  });
+
+  it('at thread level, leaves cells split into fibres exactly as they are', () => {
+    let p = zoomRect(fresh(), { t0: 4, t1: 7, r0: 3, r1: 3 }, 3); // closed hat, second group
+    p = setHit(p, 5, 'CH', { v: 0.5 }, 2);
+    for (let s = 1; s <= 20; s++) {
+      const q = randomFill(p, null, seeded(s));
+      for (let ti = 4; ti <= 7; ti++) expect(q.threads[ti].lanes.CH).toEqual(p.threads[ti].lanes.CH);
+    }
+  });
+
+  it('with only fibre cells selected, fills the fibres and nothing else', () => {
+    const area = { t0: 4, t1: 7, r0: 3, r1: 3 };
+    const p = zoomRect(fresh(), area, 3);
+    let between = 0;
+    for (let s = 1; s <= 10; s++) {
+      const q = randomFill(p, area, seeded(s));
+      q.threads.forEach((t, ti) => {
+        if (ti < 4 || ti > 7) expect(t.lanes).toEqual({});
+        else expect(Object.keys(t.lanes)).toEqual(['CH']);
+      });
+      for (let ti = 4; ti <= 7; ti++) for (const k of [1, 2]) if (getHit(q, ti, 'CH', k)) between++;
+    }
+    expect(between).toBeGreaterThan(0);
   });
 });
