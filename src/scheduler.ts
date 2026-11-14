@@ -18,6 +18,8 @@ export interface Fired {
   threadId: number;
   start: boolean;
   hits: { row: RowTag; v: number; slot: number; zoom: number }[];
+  /** The pattern this moment belongs to (thread ids repeat from one fabric to the next). */
+  of: Pattern;
 }
 
 export class Scheduler {
@@ -103,7 +105,7 @@ export class Scheduler {
       const moments = new Map<number, Fired>();
       const at = (f: number) => {
         let m = moments.get(f);
-        if (!m) moments.set(f, (m = { time: this.threadTime + f * dur, threadId: thread.id, start: f === 0, hits: [] }));
+        if (!m) moments.set(f, (m = { time: this.threadTime + f * dur, threadId: thread.id, start: f === 0, hits: [], of: p }));
         return m;
       };
       if (this.booked === 0) at(0);

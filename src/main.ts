@@ -3,10 +3,10 @@ import '@fontsource/space-grotesk/500.css';
 import '@fontsource/space-grotesk/600.css';
 import './style.css';
 
-import { BPM_MAX, BPM_MIN, DEFAULT_VELOCITY, MAX_ZOOM, ROWS, threadSeconds, type RowTag } from './constants';
+import { BPM_MAX, BPM_MIN, DEFAULT_VELOCITY, MAX_ZOOM, PALETTE, ROWS, threadSeconds, type RowTag } from './constants';
 import { Engine, type RowMix } from './audio';
 import { History } from './history';
-import { LABEL_W, computeLayout, dropIndex, hitTest, inNumberLane, touchStripTarget, type Layout, type Target } from './layout';
+import { LABEL_W, cellL, cellR, computeLayout, dropIndex, hitTest, inNumberLane, touchStripTarget, type Layout, type Target } from './layout';
 import {
   clearRect, copyRect, deleteCell, deleteGroups, duplicateGroups, fresh, getHit, insertAfter, insertFront,
   insertBack, isBoundary, merge, mergeGroups, moveGroups, notesBetween, parse, pasteClip, recolour, regionAt, runs, setHit, split, splitPlain, zoomOf, zoomPlan, zoomRect,
@@ -161,7 +161,7 @@ function setTempo(reading: number) {
     else projectBpm = v; // the table's tempo: every tied fabric plays at it
     save();
     updatePanel();
-    if (tableOpen) cards.querySelectorAll<HTMLElement>('.card-len').forEach((el, i) => { el.textContent = lengthOf(items[i]); });
+    if (tableOpen && !tableBusy) renderTable(); // cut fabrics keep their length, so their share of the cloth changes
   }
 }
 scheduler.bpm = () => (fibre && zoomGoal === 1 && !scheduler.looping ? localBpm : null) ?? bpmOf(items.find((it) => it.id === playId));
@@ -731,9 +731,6 @@ let tableOpen = false; // out on the table of fabrics
 let tableBusy = false; // the view is on its way out or back in
 let tableSel = 0; // the picked fabric
 let sliding = false;
-let stageSize = { w: 1200, h: 700 }; // the grid's size when last seen: cards are small pictures of it
-const thumbCanvas = document.createElement('canvas');
-const thumbRenderer = new Renderer(thumbCanvas, true);
 const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const DIVE = { duration: 520, easing: 'cubic-bezier(.65,0,.35,1)' };
 
@@ -756,15 +753,46 @@ function switchTo(i: number) {
   save();
 }
 
-/** A small still picture of a fabric, exactly as its grid looks. */
-function drawThumb(cv: HTMLCanvasElement, p: Pattern, w: number, h: number) {
-  const L = computeLayout(p, stageSize.w, stageSize.h);
-  thumbRenderer.reset();
-  thumbRenderer.draw(p, L, { tool: 'draw', hover: { kind: 'none' }, rect: null, groupSel: null, drop: null, playheadId: null, hold: null, stripSel: null, rowSel: null, glow: 0, glowRect: null });
-  const dpr = window.devicePixelRatio || 1;
+// On the table a fabric is drawn as plain cloth: strings, beads and group colours, nothing
+// else. Its width is its length in time, so a thread is as wide in one fabric as in the next
+// (at the same tempo), and the shuttle crosses every fabric at one steady speed.
+const CLOTH_H = 150, CLOTH_BAND = 5;
+const clothPad = (cw: number) => Math.min(4, cw * 0.3); // how far inside its cell a string sits
+
+function drawCloth(cv: HTMLCanvasElement, p: Pattern, w: number) {
+  const dpr = window.devicePixelRatio || 1, h = CLOTH_H;
   cv.width = Math.round(w * dpr);
   cv.height = Math.round(h * dpr);
-  cv.getContext('2d')!.drawImage(thumbCanvas, 0, 0, stageSize.w * dpr, stageSize.h * dpr, 0, 0, cv.width, cv.height);
+  const ctx = cv.getContext('2d')!;
+  ctx.scale(dpr, dpr);
+  const n = p.threads.length, cw = w / n, rh = (h - CLOTH_BAND) / ROWS.length, pad = clothPad(cw);
+  ctx.fillStyle = '#1b2026';
+  ctx.fillRect(0, 0, w, h);
+  for (const r of runs(p)) {
+    const hex = PALETTE[r.colour].hex, x0 = r.start * cw, x1 = r.end * cw;
+    ctx.fillStyle = hex;
+    ctx.globalAlpha = 0.07;
+    ctx.fillRect(x0, 0, x1 - x0, h - CLOTH_BAND);
+    ctx.globalAlpha = 0.85;
+    ctx.fillRect(x0 + 0.5, h - CLOTH_BAND + 1, x1 - x0 - 1, CLOTH_BAND - 1);
+  }
+  const rMax = Math.max(1.2, Math.min(3.8, cw * 0.42, rh * 0.48));
+  p.threads.forEach((t, i) => {
+    const hex = PALETTE[p.groups[t.group].colour].hex, x = i * cw + pad;
+    ctx.fillStyle = hex;
+    ctx.globalAlpha = 0.55;
+    ctx.fillRect(Math.round(x) - 0.5, 0, 1, h - CLOTH_BAND);
+    ctx.globalAlpha = 1;
+    ROWS.forEach((row, ri) => {
+      const lane = t.lanes[row];
+      lane?.slots.forEach((hit, k) => {
+        if (!hit) return;
+        ctx.beginPath();
+        ctx.arc(x + (k * cw) / lane.zoom, (ri + 0.5) * rh, rMax * (0.45 + 0.55 * hit.v) * (lane.zoom > 1 ? 0.75 : 1), 0, Math.PI * 2);
+        ctx.fill();
+      });
+    });
+  });
 }
 
 const cardEls = () => [...cards.querySelectorAll<HTMLElement>('.card')];
@@ -784,20 +812,20 @@ shuttle.innerHTML = '<i></i>';
 function moveShuttle() {
   for (const f of scheduler.due()) {
     if (!f.start) continue;
-    const index = items.find((it) => it.id === playId)?.history.current.threads.findIndex((t) => t.id === f.threadId) ?? -1;
-    if (index >= 0) shuttleAt = { id: playId, index, time: f.time };
+    const it = items.find((x) => x.history.current === f.of);
+    const index = it ? f.of.threads.findIndex((t) => t.id === f.threadId) : -1;
+    if (it && index >= 0) shuttleAt = { id: it.id, index, time: f.time };
   }
   const i = shuttleAt ? items.findIndex((it) => it.id === shuttleAt!.id) : -1;
   const card = i >= 0 && scheduler.playing ? cardEls()[i] : null;
   if (!card || !shuttleAt) { shuttle.remove(); return; }
   const it = items[i], pic = card.querySelector<HTMLElement>('.card-pic')!;
-  const L = computeLayout(it.history.current, stageSize.w, stageSize.h), k = pic.offsetWidth / stageSize.w;
+  const cw = pic.offsetWidth / it.history.current.threads.length;
   const into = Math.min(1, (engine.ctx.currentTime - shuttleAt.time) / threadSeconds(bpmOf(it)));
-  const x = (L.xs[Math.min(shuttleAt.index, L.xs.length - 1)] + into * L.colW) * k;
   if (shuttle.parentElement !== card) card.append(shuttle);
   shuttle.style.top = `${pic.offsetTop}px`;
   shuttle.style.height = `${pic.offsetHeight}px`;
-  shuttle.style.transform = `translateX(${pic.offsetLeft + x}px)`;
+  shuttle.style.transform = `translateX(${pic.offsetLeft + clothPad(cw) + (shuttleAt.index + into) * cw}px)`;
 }
 
 function pickCard(i: number) {
@@ -806,21 +834,23 @@ function pickCard(i: number) {
   cardEls()[tableSel]?.scrollIntoView({ block: 'nearest' });
 }
 
-/** Cards sit side by side like words in a line, as many as fit, and wrap like text. */
-function cardSize() {
-  const room = Math.max(240, table.clientWidth - 36 - 96);
-  const cols = Math.max(1, Math.floor(room / 300));
-  const w = Math.floor(Math.min(460, room / cols));
-  return { w, h: Math.round((w * stageSize.h) / stageSize.w) };
+/** How wide a second of music is on the table: a thread at the table's tempo is about 22 px,
+ * less if the longest fabric would not fit on one line. */
+function pxPerSecond() {
+  const room = Math.max(200, table.clientWidth - 36 - 72);
+  const longest = Math.max(...items.map((it) => it.history.current.threads.length * threadSeconds(bpmOf(it))));
+  return Math.min(22 / threadSeconds(projectBpm), room / longest);
 }
+const clothWidth = (it: Item, pps: number) => Math.max(40, Math.round(it.history.current.threads.length * threadSeconds(bpmOf(it)) * pps));
 
 function renderTable() {
   const scroll = table.scrollTop;
   cards.replaceChildren();
-  const { w, h } = cardSize();
+  const pps = pxPerSecond(), h = CLOTH_H;
   items.forEach((it, i) => {
     const card = document.createElement('div');
     card.className = `card${i === tableSel ? ' sel' : ''}${it.bpm !== null ? ' cut' : ''}`;
+    const w = clothWidth(it, pps);
     card.style.width = `${w}px`;
     const lane = document.createElement('div');
     lane.className = 'lane';
@@ -835,7 +865,7 @@ function renderTable() {
     const n = document.createElement('button');
     n.className = 'card-n';
     n.textContent = String(i + 1);
-    n.title = 'Tap to pick, drag to move';
+    n.title = `Fabric ${i + 1}, ${lengthOf(it)}. Tap to pick, drag to move`;
     lane.append(tie, n);
     if (it.bpm !== null) {
       const own = document.createElement('input');
@@ -847,17 +877,11 @@ function renderTable() {
       own.onchange = () => {
         const v = parseFloat(own.value);
         if (!Number.isNaN(v)) it.bpm = Math.round(Math.max(BPM_MIN, Math.min(BPM_MAX, v)) * 10) / 10;
-        own.value = String(it.bpm);
-        len.textContent = lengthOf(it);
         save();
-        updatePanel();
+        renderTable(); // its tempo changes how long it is, so how wide
       };
       lane.append(own);
     }
-    const len = document.createElement('span');
-    len.className = 'card-len';
-    len.textContent = lengthOf(it);
-    lane.append(len);
     if (i === tableSel) {
       const acts = document.createElement('div');
       acts.className = 'card-actions';
@@ -873,12 +897,12 @@ function renderTable() {
     card.append(lane, pic);
     dragCard(n, card, i);
     cards.append(card);
-    drawThumb(pic, it.history.current, w, h);
+    drawCloth(pic, it.history.current, w);
   });
   // The working edge: where new cloth is made.
   const add = document.createElement('div');
   add.className = 'card add';
-  add.style.width = `${Math.min(w, 120)}px`;
+  add.style.width = '44px';
   const plus = button('+', addFabric);
   plus.className = 'card-add';
   plus.title = 'A new, blank fabric at the end';
@@ -893,25 +917,20 @@ function renderTable() {
   updatePanel();
 }
 
-/** The tempo thread: from the top (where the knob is) it runs along each line of cards, over
- * every fabric's bead, and at the end of a line sweeps back to the start of the next. */
+/** The tempo thread: one strand comes down from the tempo knob along the left edge, and from
+ * it a thread runs along each line of fabrics, right across to the far edge. */
 function drawThread() {
-  const els = cardEls().filter((c) => !c.classList.contains('add')); // the thread ends at the last fabric
+  const els = cardEls().filter((c) => !c.classList.contains('add'));
   if (!els.length) return;
-  const rows: { y: number; x0: number; x1: number; bottom: number }[] = [];
-  for (const c of els) {
-    const y = c.offsetTop + 10, last = rows[rows.length - 1];
-    if (last && Math.abs(last.y - y) < 4) { last.x1 = c.offsetLeft + c.offsetWidth; last.bottom = Math.max(last.bottom, c.offsetTop + c.offsetHeight); }
-    else rows.push({ y, x0: c.offsetLeft, x1: c.offsetLeft + c.offsetWidth, bottom: c.offsetTop + c.offsetHeight });
-  }
-  const r = 10, out = 22;
-  let d = `M ${rows[0].x0 - out} -40 V ${rows[0].y - r} q 0 ${r} ${r} ${r}`;
-  rows.forEach((row, i) => {
-    const next = rows[i + 1];
-    if (!next) { d += ` H ${row.x1 - 14}`; return; }
-    const back = row.bottom + 12; // the way back runs under this line of cards
-    d += ` H ${row.x1 + out - r} q ${r} 0 ${r} ${r} V ${back - r} q 0 ${r} ${-r} ${r} H ${next.x0 - out + r} q ${-r} 0 ${-r} ${r} V ${next.y - r} q 0 ${r} ${r} ${r}`;
-  });
+  const ys = [...new Set(els.map((c) => c.offsetTop + 10))];
+  const box = cards.getBoundingClientRect(), knob = $('knob').getBoundingClientRect();
+  const x = 14, right = cards.clientWidth - 14, top = -table.scrollTop - (box.top - table.getBoundingClientRect().top) - 8;
+  const kx = Math.max(x + 24, knob.left + knob.width / 2 - box.left), r = 10, last = ys[ys.length - 1];
+  // Straight down from the knob onto the first line's thread; that thread turns down the left
+  // edge and round into the last line, and the lines between branch off the edge.
+  let d = `M ${kx} ${top} V ${ys[0]} M ${right} ${ys[0]} H ${x + (ys.length > 1 ? r : 0)}`;
+  if (ys.length > 1) d += ` q ${-r} 0 ${-r} ${r} V ${last - r} q 0 ${r} ${r} ${r} H ${right}`;
+  for (const y of ys.slice(1, -1)) d += ` M ${x} ${y} H ${right}`;
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('class', 'tempo-thread');
   svg.setAttribute('width', String(cards.scrollWidth));
@@ -997,13 +1016,21 @@ async function deleteFabric(i: number) {
   pickCard(Math.min(i, items.length - 1));
 }
 
+/** The transform that lays the grid's matrix (first string to the end of the last cell, top row
+ * to bottom row) exactly onto a fabric's cloth on the table. */
+function ontoCloth(pic: HTMLElement) {
+  const a = stage.getBoundingClientRect(), b = pic.getBoundingClientRect(), L = layout, n = L.xs.length;
+  const x0 = cellL(L, 0) + L.pad - clothPad(b.width / n) * ((cellR(L, n - 1) - cellL(L, 0)) / b.width), x1 = x0 + (cellR(L, n - 1) - cellL(L, 0));
+  const sx = b.width / (x1 - x0), sy = (b.height - CLOTH_BAND) / (L.bottom - L.top);
+  return `translate(${b.left - a.left - x0 * sx}px, ${b.top - a.top - L.top * sy}px) scale(${sx}, ${sy})`;
+}
+
 /** Zoom out: the grid shrinks into its card on the table (the dive, the other way round). */
 function openTable() {
   if (tableOpen || tableBusy || sliding || fibre || diving()) return;
   clearSelection();
   stage.scrollTo(0, 0);
   stage.style.overflow = 'hidden';
-  stageSize = { w: stage.clientWidth, h: stage.clientHeight };
   seen = true;
   save();
   tableOpen = tableBusy = true;
@@ -1012,20 +1039,18 @@ function openTable() {
   renderTable();
   const pic = cardEls()[cur].querySelector<HTMLElement>('.card-pic')!;
   pic.scrollIntoView({ block: 'center' });
-  const a = stage.getBoundingClientRect(), b = pic.getBoundingClientRect();
-  const to = `translate(${b.left - a.left}px, ${b.top - a.top}px) scale(${b.width / a.width})`;
+  const to = ontoCloth(pic);
   canvas.style.transformOrigin = '0 0';
   canvas.style.position = 'relative';
   canvas.style.zIndex = '3';
-  pic.style.visibility = 'hidden';
   const done = () => {
     canvas.style.visibility = 'hidden';
-    pic.style.visibility = '';
     tableBusy = false;
     updateLevel();
   };
+  // The grid shrinks onto its cloth and melts into it: the tags and numbers fade away.
   if (still()) done();
-  else void canvas.animate([{ transform: 'none' }, { transform: to }], DIVE).finished.then(done);
+  else void canvas.animate([{ transform: 'none', opacity: 1 }, { opacity: 1, offset: 0.55 }, { transform: to, opacity: 0 }], DIVE).finished.then(done);
   updateLevel();
 }
 
@@ -1035,11 +1060,9 @@ function closeTable(i: number) {
   tableBusy = true;
   switchTo(i);
   const pic = cardEls()[cur].querySelector<HTMLElement>('.card-pic')!;
-  const a = stage.getBoundingClientRect(), b = pic.getBoundingClientRect();
-  const from = `translate(${b.left - a.left}px, ${b.top - a.top}px) scale(${b.width / a.width})`;
-  tick(); // draw the fabric before it shows
+  tick(); // draw the fabric (and lay it out) before it shows
+  const from = ontoCloth(pic);
   canvas.style.visibility = '';
-  pic.style.visibility = 'hidden';
   const done = () => {
     table.hidden = true;
     tableOpen = tableBusy = false;
@@ -1048,7 +1071,7 @@ function closeTable(i: number) {
     updateLevel();
   };
   if (still()) done();
-  else void canvas.animate([{ transform: from }, { transform: 'none' }], DIVE).finished.then(done);
+  else void canvas.animate([{ transform: from, opacity: 0 }, { opacity: 1, offset: 0.45 }, { transform: 'none', opacity: 1 }], DIVE).finished.then(done);
 }
 
 /** On to the next fabric (after the last comes the first): the grid slides away to the left

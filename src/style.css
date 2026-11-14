@@ -159,32 +159,31 @@ button:focus:not(:focus-visible) { outline: none; }
    seam between neighbours. The tempo thread runs over each line and back to the next. */
 #table { position: absolute; inset: 0; overflow: auto; z-index: 2; background: var(--bg); padding: 44px 18px 80px; }
 #table[hidden] { display: none; }
-#cards { position: relative; display: flex; flex-wrap: wrap; align-content: flex-start; row-gap: 30px; padding: 0 48px; }
+#cards { position: relative; display: flex; flex-wrap: wrap; align-content: flex-start; row-gap: 22px; padding: 0 36px; }
 .tempo-thread { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 .tempo-thread path { fill: none; stroke: var(--caramel); stroke-width: 1.5; stroke-linecap: round; opacity: 0.75; }
 .card { position: relative; }
 .lane { position: relative; height: 58px; }
-.card-n { position: absolute; left: 14px; bottom: 0; width: 30px; height: 30px; border-radius: 50%; padding: 0; cursor: grab; touch-action: none; font-weight: 600; background: var(--bg); border-color: var(--caramel); z-index: 1; }
+.card-n { position: absolute; left: 5px; bottom: 0; width: 30px; height: 30px; border-radius: 50%; padding: 0; cursor: grab; touch-action: none; font-weight: 600; background: var(--bg); border-color: var(--caramel); z-index: 1; }
 .card.sel .card-n { background: var(--text); color: var(--bg); border-color: var(--text); }
 /* The tie: a short thread from the tempo thread (at 10px) down to the bead. Cut, it leaves two loose ends. */
-.tie { position: absolute; left: 17px; top: 3px; width: 24px; height: 26px; border: none; border-radius: 0; padding: 0;
+.tie { position: absolute; left: 8px; top: 3px; width: 24px; height: 26px; border: none; border-radius: 0; padding: 0;
   background: linear-gradient(var(--caramel), var(--caramel)) center 7px / 1.5px 19px no-repeat; }
 .card.cut .tie { background: linear-gradient(var(--caramel), var(--caramel)) center 7px / 1.5px 5px no-repeat, linear-gradient(var(--dim), var(--dim)) center 20px / 1.5px 6px no-repeat; }
 .tie::after { content: attr(data-mark); position: absolute; left: 100%; top: 4px; font-size: 13px; color: var(--text); opacity: 0; transition: opacity 0.15s; }
 .tie:hover::after { opacity: 1; }
 .card.cut .card-n { border-color: var(--dim); }
-.own-bpm { position: absolute; left: 52px; bottom: 3px; width: 58px; font: inherit; font-size: 13px; font-weight: 600; color: var(--text);
+.own-bpm { position: absolute; left: 40px; z-index: 2; bottom: 3px; width: 58px; font: inherit; font-size: 13px; font-weight: 600; color: var(--text);
   background: #1f1b17; border: 1px solid var(--border); border-radius: 5px; padding: 2px 4px; user-select: text; -webkit-user-select: text; }
-.card-len { position: absolute; right: 10px; bottom: 6px; font-size: 11px; color: var(--dim); }
-.card.sel .card-len { display: none; }
 .card-pic { display: block; outline: 1px solid #ffffff24; outline-offset: -1px; cursor: zoom-in; }
 .card-pic:hover { outline-color: var(--secondary); }
 .card.sel .card-pic { outline-color: var(--text); }
 .card.dragging { z-index: 4; }
 .card.dragging .card-pic { box-shadow: 0 10px 30px #000c; outline-color: var(--text); }
 .card.dragging .card-n { cursor: grabbing; }
-.card-actions { position: absolute; right: 6px; bottom: 4px; display: flex; gap: 6px; }
-.card-actions button { padding: 3px 9px; font-size: 12px; }
+.card-actions { position: absolute; left: 42px; bottom: 3px; display: flex; gap: 6px; z-index: 3; white-space: nowrap; }
+.card.cut .card-actions { left: 106px; }
+.card-actions button { padding: 3px 9px; font-size: 12px; background: var(--bg); }
 .card-add { width: 100%; border-style: dashed; border-radius: 0; color: var(--dim); font-size: 20px; }
 /* The shuttle crosses the playing fabric, trailing its thread. */
 .shuttle { position: absolute; left: 0; width: 0; pointer-events: none; z-index: 3; border-left: 1.5px solid var(--caramel); }
