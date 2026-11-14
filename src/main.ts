@@ -32,13 +32,18 @@ const actions = $<HTMLDivElement>('actions');
 // screen. Fabrics follow each other in order (a "paragraph"); one of them is open at a time.
 // Each fabric keeps its own undo history. The tempo belongs to the paragraph.
 const PROJECT_KEY = 'orimono.project.v1';
-interface Item { id: number; history: History }
+/** bpm: the fabric's own tempo once its tie to the table's tempo thread is cut; null while tied. */
+interface Item { id: number; history: History; bpm: number | null }
+// Kept ready for a later phase: stored fabrics and sound resources on the shelf.
+let shelf: { fabrics: Pattern[]; sounds: unknown[] } = { fabrics: [], sounds: [] };
 
 let saveTimer = 0;
 function saveNow() {
   window.clearTimeout(saveTimer);
-  const fabrics = items.map((it) => ({ ...it.history.current, bpm: projectBpm }));
-  localStorage.setItem(PROJECT_KEY, JSON.stringify({ v: 1, fabrics, cur, bpm: projectBpm, seen }));
+  // A project: the table (fabrics in order), the shelf, and settings (tempo, row levels).
+  const fabrics = items.map((it) => ({ ...it.history.current, bpm: it.bpm ?? projectBpm }));
+  const own = items.map((it) => it.bpm !== null);
+  localStorage.setItem(PROJECT_KEY, JSON.stringify({ v: 1, fabrics, own, cur, bpm: projectBpm, seen, shelf, mix }));
 }
 function save() {
   window.clearTimeout(saveTimer);
@@ -46,7 +51,9 @@ function save() {
 }
 window.addEventListener('pagehide', () => { if (items.length) saveNow(); }); // nothing is lost by leaving quickly
 let nextItemId = 1;
-const makeItem = (p: Pattern): Item => ({ id: nextItemId++, history: new History(p, () => { save(); updatePanel(); }) });
+const makeItem = (p: Pattern, bpm: number | null = null): Item => ({ id: nextItemId++, bpm, history: new History(p, () => { save(); updatePanel(); }) });
+const bpmOf = (it: Item | undefined) => it?.bpm ?? projectBpm;
+let savedMix: Partial<Record<RowTag, RowMix>> | null = null;
 
 let items: Item[] = [];
 let cur = 0; // the open fabric
@@ -55,7 +62,9 @@ let seen = false; // has the table of fabrics been visited yet?
 try {
   const raw = JSON.parse(localStorage.getItem(PROJECT_KEY) ?? 'null');
   if (raw && Array.isArray(raw.fabrics)) {
-    items = (raw.fabrics as unknown[]).map(parse).filter((p): p is Pattern => !!p).map(makeItem);
+    items = (raw.fabrics as unknown[]).map((f, i) => { const p = parse(f); return p ? makeItem(p, raw.own?.[i] ? p.bpm : null) : null; }).filter((x): x is Item => !!x);
+    if (raw.shelf && Array.isArray(raw.shelf.fabrics)) shelf = { fabrics: raw.shelf.fabrics, sounds: raw.shelf.sounds ?? [] };
+    if (raw.mix && typeof raw.mix === 'object') savedMix = raw.mix;
     cur = Math.max(0, Math.min(items.length - 1, raw.cur | 0));
     if (typeof raw.bpm === 'number') projectBpm = raw.bpm;
     seen = !!raw.seen;
@@ -74,15 +83,15 @@ const pattern = () => history.current;
 
 const engine = new Engine();
 
-// Row faders: one level per row, for every pattern (kept in this browser, not in undo).
-const MIX_KEY = 'orimono.mix.v2'; // v1 levels were baked into the kit (Nov 2026)
+// Row faders: one level per row, for the whole project (saved with it, not in undo).
+const MIX_KEY = 'orimono.mix.v2'; // where levels lived before projects (Nov 2026)
 let mix: Partial<Record<RowTag, RowMix>> = {};
-try { mix = JSON.parse(localStorage.getItem(MIX_KEY) ?? '{}'); } catch { /* ignore */ }
+try { mix = savedMix ?? JSON.parse(localStorage.getItem(MIX_KEY) ?? '{}'); } catch { /* ignore */ }
 engine.setMix(mix);
 function setRowMix(tag: RowTag, change: Partial<RowMix>) {
   mix = { ...mix, [tag]: { db: 0, mute: false, solo: false, ...mix[tag], ...change } };
   engine.setMix(mix);
-  localStorage.setItem(MIX_KEY, JSON.stringify(mix));
+  save();
 }
 // What is playing: usually the open fabric; out on the table, each fabric in turn.
 let playId = items[cur].id;
@@ -140,18 +149,29 @@ function tempoScale() {
   for (let ti = r.t0; ti <= r.t1; ti++) for (let ri = r.r0; ri <= r.r1; ri++) z = Math.max(z, zoomOf(pattern(), ti, ROWS[ri]));
   return z;
 }
-const tempoReading = () => Math.round((listening() ? localBpm ?? projectBpm : projectBpm) * tempoScale() * 10) / 10;
+/** The open fabric plays at its own tempo if its tie is cut; out on the table the knob is always the table's. */
+const ownTempo = () => !tableOpen && items[cur].bpm !== null;
+const baseBpm = () => (tableOpen ? projectBpm : bpmOf(items[cur]));
+const tempoReading = () => Math.round((listening() ? localBpm ?? baseBpm() : baseBpm()) * tempoScale() * 10) / 10;
 function setTempo(reading: number) {
   if (listening()) { localBpm = reading / tempoScale(); updatePanel(); }
-  else { projectBpm = Math.round(reading * 10) / 10; save(); updatePanel(); } // the paragraph's tempo: every fabric plays at it
+  else {
+    const v = Math.round(reading * 10) / 10;
+    if (ownTempo()) items[cur].bpm = v; // a cut fabric: its own tempo
+    else projectBpm = v; // the table's tempo: every tied fabric plays at it
+    save();
+    updatePanel();
+    if (tableOpen) cards.querySelectorAll<HTMLElement>('.card-len').forEach((el, i) => { el.textContent = lengthOf(items[i]); });
+  }
 }
-scheduler.bpm = () => (fibre && zoomGoal === 1 && !scheduler.looping ? localBpm : null) ?? projectBpm;
+scheduler.bpm = () => (fibre && zoomGoal === 1 && !scheduler.looping ? localBpm : null) ?? bpmOf(items.find((it) => it.id === playId));
 
 function updatePanel() {
   const p = pattern();
   const shown = tempoReading(), real = shown / tempoScale();
   $('bpm').textContent = shown.toFixed(shown % 1 ? 1 : 0);
   document.querySelector('.tempo')!.classList.toggle('local', listening());
+  document.querySelector('.tempo')!.classList.toggle('own', !listening() && ownTempo());
   $('knob').title = listening()
     ? 'Listening speed in here, counted in fibres. It does not change the tempo outside.'
     : 'Tempo: drag up/down, scroll or arrow keys (whole BPM). Double-click to type an exact value, like 72.5.';
@@ -162,13 +182,13 @@ function updatePanel() {
     $('secs').textContent = `${(nT * threadSeconds(real)).toFixed(2)} s`;
   } else if (tableOpen) {
     // Out on the table the readout is about the whole paragraph.
-    const total = items.reduce((n, it) => n + it.history.current.threads.length, 0);
+    const total = items.reduce((n, it) => n + it.history.current.threads.length * threadSeconds(bpmOf(it)), 0);
     $('len').textContent = `${items.length} fabric${items.length === 1 ? '' : 's'}`;
-    $('secs').textContent = `${(total * threadSeconds(projectBpm)).toFixed(2)} s`;
+    $('secs').textContent = `${total.toFixed(2)} s`;
   } else {
     const which = items.length > 1 ? `${cur + 1}/${items.length} · ` : ''; // which fabric this is
     $('len').textContent = `${which}${p.threads.length} thread${p.threads.length === 1 ? '' : 's'}`;
-    $('secs').textContent = `${(p.threads.length * threadSeconds(projectBpm)).toFixed(2)} s`;
+    $('secs').textContent = `${(p.threads.length * threadSeconds(baseBpm())).toFixed(2)} s`;
   }
   $<HTMLButtonElement>('undo').disabled = tableOpen || !history.canUndo;
   $<HTMLButtonElement>('redo').disabled = tableOpen || !history.canRedo;
@@ -747,71 +767,191 @@ function drawThumb(cv: HTMLCanvasElement, p: Pattern, w: number, h: number) {
   cv.getContext('2d')!.drawImage(thumbCanvas, 0, 0, stageSize.w * dpr, stageSize.h * dpr, 0, 0, cv.width, cv.height);
 }
 
+const cardEls = () => [...cards.querySelectorAll<HTMLElement>('.card')];
+const lengthOf = (it: Item) => `${(it.history.current.threads.length * threadSeconds(bpmOf(it))).toFixed(2)} s`;
+
 function markPlaying() {
-  [...cards.querySelectorAll('.card')].forEach((c, i) => c.classList.toggle('playing', scheduler.playing && items[i]?.id === playId));
+  cardEls().forEach((c, i) => c.classList.toggle('playing', scheduler.playing && items[i]?.id === playId));
+  if (!scheduler.playing) shuttleAt = null;
+}
+
+// The shuttle: out on the table, playing is a shuttle carried across each fabric in turn, left
+// to right, leaving its thread behind. It follows the real playhead, thread by thread.
+let shuttleAt: { id: number; index: number; time: number } | null = null;
+const shuttle = document.createElement('div');
+shuttle.className = 'shuttle';
+shuttle.innerHTML = '<i></i>';
+function moveShuttle() {
+  for (const f of scheduler.due()) {
+    if (!f.start) continue;
+    const index = items.find((it) => it.id === playId)?.history.current.threads.findIndex((t) => t.id === f.threadId) ?? -1;
+    if (index >= 0) shuttleAt = { id: playId, index, time: f.time };
+  }
+  const i = shuttleAt ? items.findIndex((it) => it.id === shuttleAt!.id) : -1;
+  const card = i >= 0 && scheduler.playing ? cardEls()[i] : null;
+  if (!card || !shuttleAt) { shuttle.remove(); return; }
+  const it = items[i], pic = card.querySelector<HTMLElement>('.card-pic')!;
+  const L = computeLayout(it.history.current, stageSize.w, stageSize.h), k = pic.offsetWidth / stageSize.w;
+  const into = Math.min(1, (engine.ctx.currentTime - shuttleAt.time) / threadSeconds(bpmOf(it)));
+  const x = (L.xs[Math.min(shuttleAt.index, L.xs.length - 1)] + into * L.colW) * k;
+  if (shuttle.parentElement !== card) card.append(shuttle);
+  shuttle.style.top = `${pic.offsetTop}px`;
+  shuttle.style.height = `${pic.offsetHeight}px`;
+  shuttle.style.transform = `translateX(${pic.offsetLeft + x}px)`;
 }
 
 function pickCard(i: number) {
   tableSel = Math.max(0, Math.min(items.length - 1, i));
   renderTable();
-  cards.children[tableSel]?.scrollIntoView({ block: 'nearest' });
+  cardEls()[tableSel]?.scrollIntoView({ block: 'nearest' });
+}
+
+/** Cards sit side by side like words in a line, as many as fit, and wrap like text. */
+function cardSize() {
+  const room = Math.max(240, table.clientWidth - 36 - 96);
+  const cols = Math.max(1, Math.floor(room / 300));
+  const w = Math.floor(Math.min(460, room / cols));
+  return { w, h: Math.round((w * stageSize.h) / stageSize.w) };
 }
 
 function renderTable() {
+  const scroll = table.scrollTop;
   cards.replaceChildren();
-  const w = Math.round(Math.min(480, Math.max(240, stageSize.w * 0.4))), h = Math.round((w * stageSize.h) / stageSize.w);
+  const { w, h } = cardSize();
   items.forEach((it, i) => {
     const card = document.createElement('div');
-    card.className = i === tableSel ? 'card sel' : 'card';
+    card.className = `card${i === tableSel ? ' sel' : ''}${it.bpm !== null ? ' cut' : ''}`;
+    card.style.width = `${w}px`;
+    const lane = document.createElement('div');
+    lane.className = 'lane';
+    // The tie from the table's tempo thread down to this fabric: cut it and the fabric keeps
+    // its own tempo; join it again and it follows the table's.
+    const tie = document.createElement('button');
+    tie.className = 'tie';
+    tie.title = it.bpm === null ? 'Cut: give this fabric its own tempo' : "Join: follow the table's tempo again";
+    tie.dataset.mark = it.bpm === null ? '✂' : '⋈';
+    tie.onclick = () => { it.bpm = it.bpm === null ? projectBpm : null; save(); renderTable(); };
     // The number picks the fabric (tap) and moves it (drag); the picture goes inside.
     const n = document.createElement('button');
     n.className = 'card-n';
     n.textContent = String(i + 1);
     n.title = 'Tap to pick, drag to move';
+    lane.append(tie, n);
+    if (it.bpm !== null) {
+      const own = document.createElement('input');
+      own.type = 'number';
+      own.className = 'own-bpm';
+      own.min = String(BPM_MIN); own.max = String(BPM_MAX); own.step = '1';
+      own.value = String(it.bpm);
+      own.title = "This fabric's own tempo (BPM)";
+      own.onchange = () => {
+        const v = parseFloat(own.value);
+        if (!Number.isNaN(v)) it.bpm = Math.round(Math.max(BPM_MIN, Math.min(BPM_MAX, v)) * 10) / 10;
+        own.value = String(it.bpm);
+        len.textContent = lengthOf(it);
+        save();
+        updatePanel();
+      };
+      lane.append(own);
+    }
+    const len = document.createElement('span');
+    len.className = 'card-len';
+    len.textContent = lengthOf(it);
+    lane.append(len);
+    if (i === tableSel) {
+      const acts = document.createElement('div');
+      acts.className = 'card-actions';
+      acts.append(button('Duplicate', () => duplicateFabric(i)), button('Delete', () => void deleteFabric(i), { danger: true, disabled: items.length < 2 }));
+      lane.append(acts);
+    }
     const pic = document.createElement('canvas');
     pic.className = 'card-pic';
     pic.style.width = `${w}px`;
     pic.style.height = `${h}px`;
     pic.title = 'Go into this fabric';
     pic.onclick = () => closeTable(i);
-    card.append(n, pic);
-    if (i === tableSel) {
-      const acts = document.createElement('div');
-      acts.className = 'card-actions';
-      acts.append(button('Duplicate', () => duplicateFabric(i)), button('Delete', () => void deleteFabric(i), { danger: true, disabled: items.length < 2 }));
-      card.append(acts);
-    }
+    card.append(lane, pic);
     dragCard(n, card, i);
     cards.append(card);
     drawThumb(pic, it.history.current, w, h);
   });
-  const add = button('+', addFabric);
-  add.className = 'card-add';
-  add.title = 'A new, blank fabric at the end';
-  add.style.width = `${w}px`;
+  // The working edge: where new cloth is made.
+  const add = document.createElement('div');
+  add.className = 'card add';
+  add.style.width = `${Math.min(w, 120)}px`;
+  const plus = button('+', addFabric);
+  plus.className = 'card-add';
+  plus.title = 'A new, blank fabric at the end';
+  plus.style.height = `${h}px`;
+  const gap = document.createElement('div');
+  gap.className = 'lane';
+  add.append(gap, plus);
   cards.append(add);
+  drawThread();
+  table.scrollTop = scroll;
   markPlaying();
   updatePanel();
 }
 
+/** The tempo thread: from the top (where the knob is) it runs along each line of cards, over
+ * every fabric's bead, and at the end of a line sweeps back to the start of the next. */
+function drawThread() {
+  const els = cardEls().filter((c) => !c.classList.contains('add')); // the thread ends at the last fabric
+  if (!els.length) return;
+  const rows: { y: number; x0: number; x1: number; bottom: number }[] = [];
+  for (const c of els) {
+    const y = c.offsetTop + 10, last = rows[rows.length - 1];
+    if (last && Math.abs(last.y - y) < 4) { last.x1 = c.offsetLeft + c.offsetWidth; last.bottom = Math.max(last.bottom, c.offsetTop + c.offsetHeight); }
+    else rows.push({ y, x0: c.offsetLeft, x1: c.offsetLeft + c.offsetWidth, bottom: c.offsetTop + c.offsetHeight });
+  }
+  const r = 10, out = 22;
+  let d = `M ${rows[0].x0 - out} -40 V ${rows[0].y - r} q 0 ${r} ${r} ${r}`;
+  rows.forEach((row, i) => {
+    const next = rows[i + 1];
+    if (!next) { d += ` H ${row.x1 - 14}`; return; }
+    const back = row.bottom + 12; // the way back runs under this line of cards
+    d += ` H ${row.x1 + out - r} q ${r} 0 ${r} ${r} V ${back - r} q 0 ${r} ${-r} ${r} H ${next.x0 - out + r} q ${-r} 0 ${-r} ${r} V ${next.y - r} q 0 ${r} ${r} ${r}`;
+  });
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'tempo-thread');
+  svg.setAttribute('width', String(cards.scrollWidth));
+  svg.setAttribute('height', String(cards.scrollHeight));
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', d);
+  svg.append(path);
+  cards.prepend(svg);
+}
+window.addEventListener('resize', () => { if (tableOpen && !tableBusy) renderTable(); });
+
 /** Drag a card by its number to a new place in the order. */
 function dragCard(handle: HTMLElement, card: HTMLElement, i: number) {
-  let y0 = 0, moved = false, to = i;
+  let x0 = 0, y0 = 0, moved = false, to = i;
   const line = document.createElement('div');
   line.className = 'drop-line';
-  handle.addEventListener('pointerdown', (e) => { handle.setPointerCapture(e.pointerId); y0 = e.clientY; moved = false; to = i; });
+  handle.addEventListener('pointerdown', (e) => { handle.setPointerCapture(e.pointerId); x0 = e.clientX; y0 = e.clientY; moved = false; to = i; });
   handle.addEventListener('pointermove', (e) => {
     if (!handle.hasPointerCapture(e.pointerId)) return;
-    if (Math.abs(e.clientY - y0) > 6) moved = true;
+    if (Math.hypot(e.clientX - x0, e.clientY - y0) > 6) moved = true;
     if (!moved) return;
     card.classList.add('dragging');
-    card.style.transform = `translateY(${e.clientY - y0}px)`;
-    // Where it would land: after every other card whose middle is above the pointer.
-    const others = [...cards.querySelectorAll<HTMLElement>('.card')].filter((c) => c !== card);
-    to = others.filter((c) => { const b = c.getBoundingClientRect(); return e.clientY > b.top + b.height / 2; }).length;
-    const before = others[to], last = others[others.length - 1];
-    line.style.top = `${before ? before.offsetTop - 9 : last ? last.offsetTop + last.offsetHeight + 9 : 0}px`;
-    if (!line.isConnected) cards.append(line);
+    card.style.transform = `translate(${e.clientX - x0}px, ${e.clientY - y0}px)`;
+    // Where it would land, in reading order: after every other card that is on a line above
+    // the pointer, or on the pointer's line with its middle to the left of it.
+    const others = cardEls().filter((c) => c !== card);
+    const before = (c: HTMLElement) => {
+      const b = c.getBoundingClientRect();
+      return e.clientY > b.bottom || (e.clientY >= b.top && e.clientX > b.left + b.width / 2);
+    };
+    to = others.filter(before).length;
+    const at = others[to], last = others[others.length - 1];
+    const mark = at ?? last;
+    if (mark) {
+      const pic = mark.querySelector<HTMLElement>('.card-pic')!;
+      line.style.left = `${mark.offsetLeft + (at ? 0 : mark.offsetWidth)}px`;
+      line.style.top = `${mark.offsetTop + pic.offsetTop}px`;
+      line.style.height = `${pic.offsetHeight}px`;
+      if (!line.isConnected) cards.append(line);
+    }
   });
   const end = () => {
     line.remove();
@@ -834,12 +974,11 @@ function addFabric() {
   items.push(makeItem(fresh()));
   save();
   pickCard(items.length - 1);
-  cards.lastElementChild?.scrollIntoView({ block: 'nearest' });
 }
 
 /** A copy right after the original: this is how a fabric is repeated, or varied. */
 function duplicateFabric(i: number) {
-  items.splice(i + 1, 0, makeItem(structuredClone(items[i].history.current)));
+  items.splice(i + 1, 0, makeItem(structuredClone(items[i].history.current), items[i].bpm));
   if (cur > i) cur++;
   save();
   pickCard(i + 1);
@@ -871,7 +1010,7 @@ function openTable() {
   tableSel = cur;
   table.hidden = false;
   renderTable();
-  const pic = cards.children[cur].querySelector<HTMLElement>('.card-pic')!;
+  const pic = cardEls()[cur].querySelector<HTMLElement>('.card-pic')!;
   pic.scrollIntoView({ block: 'center' });
   const a = stage.getBoundingClientRect(), b = pic.getBoundingClientRect();
   const to = `translate(${b.left - a.left}px, ${b.top - a.top}px) scale(${b.width / a.width})`;
@@ -895,7 +1034,7 @@ function closeTable(i: number) {
   if (!tableOpen || tableBusy) return;
   tableBusy = true;
   switchTo(i);
-  const pic = cards.children[cur].querySelector<HTMLElement>('.card-pic')!;
+  const pic = cardEls()[cur].querySelector<HTMLElement>('.card-pic')!;
   const a = stage.getBoundingClientRect(), b = pic.getBoundingClientRect();
   const from = `translate(${b.left - a.left}px, ${b.top - a.top}px) scale(${b.width / a.width})`;
   tick(); // draw the fabric before it shows
@@ -1233,7 +1372,7 @@ function frame() {
   requestAnimationFrame(frame);
 }
 function tick() {
-  if (tableOpen && !tableBusy) { scheduler.due(); return; } // the grid is out of sight
+  if (tableOpen && !tableBusy) { moveShuttle(); return; } // the grid is out of sight
   const p = pattern();
   const nowMs = performance.now(), dt = Math.min(100, nowMs - lastFrame);
   lastFrame = nowMs;
