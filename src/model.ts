@@ -61,6 +61,15 @@ const clone = <T>(x: T): T => structuredClone(x);
 
 // ---------------------------------------------------------------- basics
 
+/** The smallest pattern: one group of one cell, to be grown by hand (a new fabric starts so). */
+export function single(): Pattern {
+  const p: Pattern = { threads: [], groups: {}, shelf: { resting: [], reuse: 0 }, bpm: DEFAULT_BPM, nextId: 1 };
+  const gid = p.nextId++;
+  p.groups[gid] = { id: gid, colour: 0 };
+  p.threads.push({ id: p.nextId++, group: gid, lanes: {} });
+  return p;
+}
+
 export function fresh(): Pattern {
   const p: Pattern = { threads: [], groups: {}, shelf: { resting: [], reuse: 0 }, bpm: DEFAULT_BPM, nextId: 1 };
   for (let g = 0; g < 4; g++) {
