@@ -843,7 +843,7 @@ function markPlaying() {
   cardEls().forEach((c, i) => c.classList.toggle('playing', scheduler.playing && items[i]?.id === playId));
   if (!scheduler.playing) {
     // Stopped: the shuttle fades out where it was and fades in again where it rests.
-    if (shuttleAt && lastShuttle && tableOpen) stopFade = { ...lastShuttle, t0: performance.now() };
+    if (shuttleAt && lastShuttle && tableOpen) stopFade = { ...lastShuttle, t0: performance.now(), pps: pxPerSecond() };
     shuttleAt = null;
     cameFrom = null;
   }
@@ -859,7 +859,7 @@ let shuttleAt: { id: number; index: number; time: number } | null = null; // the
 let cameFrom: { id: number; time: number } | null = null; // the fabric just left, and when
 let shuttleDrag = false;
 let lastShuttle: { x: number; g: { y: number; h: number } } | null = null; // where the moving shuttle was last drawn
-let stopFade: { x: number; g: { y: number; h: number }; t0: number } | null = null;
+let stopFade: { x: number; g: { y: number; h: number }; t0: number; pps: number } | null = null;
 const shuttles = [0, 1, 2].map(() => {
   const el = document.createElement('div');
   el.className = 'shuttle';
@@ -906,10 +906,13 @@ function moveShuttle() {
   if (!scheduler.playing || !shuttleAt || i < 0 || shuttleDrag) {
     // At rest: waiting at the place playing will start from.
     const { it, index } = startPlace(), g = clothAt(items.indexOf(it));
-    const f = stopFade ? Math.min(1, (performance.now() - stopFade.t0) / 260) : 1;
+    // Stopped a moment ago: it glides on and fades over a short run, just as it does at the
+    // end of a line, while the resting one fades in.
+    const ran = stopFade ? ((performance.now() - stopFade.t0) / 1000) * stopFade.pps : 0;
+    const f = stopFade ? Math.min(1, ran / 24) : 1;
     showShuttle(0, g.left + g.pad + index * g.cw, g, f, true, false);
     hideShuttle(1);
-    if (stopFade && f < 1) showShuttle(2, stopFade.x, stopFade.g, 1 - f, false, false);
+    if (stopFade && f < 1) showShuttle(2, stopFade.x + ran, stopFade.g, 1 - f, false, true);
     else { hideShuttle(2); stopFade = null; }
     return;
   }
@@ -978,33 +981,59 @@ function pxPerSecond() {
   const longest = Math.max(...items.map((it) => it.history.current.threads.length * threadSeconds(bpmOf(it))));
   return Math.min(22 / threadSeconds(projectBpm), room / longest);
 }
-const clothWidth = (it: Item, pps: number) => Math.max(40, Math.round(it.history.current.threads.length * threadSeconds(bpmOf(it)) * pps));
+// Exactly its length in time, however short: the shuttle keeps one speed over every fabric.
+const clothWidth = (it: Item, pps: number) => Math.max(6, Math.round(it.history.current.threads.length * threadSeconds(bpmOf(it)) * pps));
 
 function renderTable() {
   const scroll = table.scrollTop;
   cards.replaceChildren();
   const pps = pxPerSecond(), h = CLOTH_H;
+  let prevW = Infinity, prevHigh = false;
   items.forEach((it, i) => {
     const card = document.createElement('div');
     card.className = `card${i === tableSel ? ' sel' : ''}${it.bpm !== null ? ' cut' : ''}`;
     card.dataset.i = String(i);
     const w = clothWidth(it, pps);
     card.style.width = `${w}px`;
+    // The number hangs straight above the fabric's first thread, where the shuttle waits to
+    // play it from the start. After a very short fabric the next number sits higher, so the
+    // two never touch.
+    const x0 = clothPad(w / it.history.current.threads.length);
+    const high = prevW < 30 && !prevHigh, laneH = high ? 96 : 68, H = laneH - 26;
+    prevW = w;
+    prevHigh = high;
     const lane = document.createElement('div');
     lane.className = 'lane';
-    // The tie from the table's tempo thread down to this fabric: cut it and the fabric keeps
-    // its own tempo; join it again and it follows the table's.
-    const tie = document.createElement('button');
-    tie.className = 'tie';
-    tie.title = it.bpm === null ? 'Cut: this fabric keeps a tempo of its own (set it inside, with the tempo knob)' : `Join: follow the table's tempo again (its own is ${it.bpm} BPM)`;
-    tie.dataset.mark = it.bpm === null ? '✂' : '⋈';
-    tie.onclick = () => { it.bpm = it.bpm === null ? projectBpm : null; save(); renderTable(); };
-    // The number picks the fabric (tap) and moves it (drag); the picture goes inside.
+    lane.style.height = `${laneH}px`;
     const n = document.createElement('button');
     n.className = 'card-n';
+    n.style.left = `${x0 - 13}px`;
     n.textContent = String(i + 1);
-    n.title = `Fabric ${i + 1}, ${lengthOf(it)}${it.bpm !== null ? `, own tempo ${it.bpm} BPM` : ''}. Tap to pick, drag to move or to put on the shelf`;
-    lane.append(tie, n);
+    // The tie from the number down to the table's tempo thread, with a bow in it, clear of both
+    // the number and the shuttle. Cut the bow and the fabric keeps a tempo of its own; tie it
+    // again and it follows the table's.
+    const c = H - 28; // the bow's height on the tie
+    const art = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    art.setAttribute('class', 'tie-art');
+    art.setAttribute('width', '32');
+    art.setAttribute('height', String(H));
+    art.style.left = `${x0 - 16}px`;
+    art.innerHTML = `<path class="tie-up" d="M16 0 V${c - 3}" style="transform-origin:16px 0"/>`
+      + `<path class="tie-down" d="M16 ${c + 3} V${H}" style="transform-origin:16px ${H}px"/>`
+      + `<g class="bow" style="transform-origin:16px ${c}px"><path d="M16 ${c} C7 ${c - 9} 2 ${c + 2} 16 ${c} C30 ${c + 2} 25 ${c - 9} 16 ${c}"/><circle cx="16" cy="${c}" r="2.2"/></g>`;
+    const tie = document.createElement('button');
+    tie.className = 'tie';
+    tie.style.left = `${x0 - 13}px`;
+    tie.style.top = `${26 + c - 10}px`;
+    const label = () => {
+      tie.title = it.bpm === null ? 'Cut: this fabric keeps a tempo of its own (set it inside, with the tempo knob)' : `Tie: follow the table's tempo again (its own is ${it.bpm} BPM)`;
+      tie.dataset.mark = it.bpm === null ? '✂' : '⋈';
+      n.title = `Fabric ${i + 1}, ${lengthOf(it)}${it.bpm !== null ? `, own tempo ${it.bpm} BPM` : ''}. Tap to pick, drag to move or to put away`;
+    };
+    label();
+    // Cutting keeps the tempo it had, so nothing moves: only the bow comes undone (or is tied).
+    tie.onclick = () => { it.bpm = it.bpm === null ? projectBpm : null; card.classList.toggle('cut', it.bpm !== null); label(); save(); updatePanel(); if (it.bpm === null) window.setTimeout(() => { if (tableOpen && !tableBusy) renderTable(); }, 560); };
+    lane.append(art, tie, n);
     const pic = document.createElement('canvas');
     pic.className = 'card-pic';
     pic.style.width = `${w}px`;
@@ -1022,11 +1051,9 @@ function renderTable() {
   add.style.width = '44px';
   const plus = button('+', addFabric);
   plus.className = 'card-add';
-  plus.title = 'A new, blank fabric at the end';
+  plus.title = 'A new fabric at the end: one cell, to grow as you like';
   plus.style.height = `${h}px`;
-  const gap = document.createElement('div');
-  gap.className = 'lane';
-  add.append(gap, plus);
+  add.append(plus);
   cards.append(add);
   drawThread();
   renderShelf();
@@ -1054,17 +1081,23 @@ function dropPlace(clientX: number, clientY: number, skip?: HTMLElement) {
   const pic = mark?.querySelector<HTMLElement>('.card-pic');
   return { to, mark: mark && pic ? { left: mark.offsetLeft + (at ? 0 : mark.offsetWidth), top: mark.offsetTop + pic.offsetTop, height: pic.offsetHeight } : null };
 }
-const overShelf = (clientY: number) => clientY < shelfEl.getBoundingClientRect().bottom;
+// The shelf is a drawer above the toolbar: out of sight until a fabric is picked up, when it
+// slides down to take it. Once something is in it, its lip shows at the top edge.
+const drawer = $('drawer');
+let drawerTimer = 0;
+function openDrawer(on: boolean, after = 0) {
+  window.clearTimeout(drawerTimer);
+  drawerTimer = window.setTimeout(() => drawer.classList.toggle('open', on), after);
+}
+const overShelf = (clientY: number) => drawer.classList.contains('open') && clientY < drawer.getBoundingClientRect().bottom;
+let drawerDrag = false;
+drawer.addEventListener('pointerenter', () => openDrawer(true));
+drawer.addEventListener('pointerleave', () => { if (!drawerDrag) openDrawer(false, 250); });
+drawer.addEventListener('click', () => openDrawer(true));
 
 function renderShelf() {
   shelfEl.replaceChildren();
-  if (!shelf.fabrics.length) {
-    const hint = document.createElement('span');
-    hint.className = 'shelf-hint';
-    hint.textContent = 'The shelf. Drag a fabric up here by its number to put it away; drag it back down for a copy.';
-    shelfEl.append(hint);
-    return;
-  }
+  drawer.classList.toggle('has', shelf.fabrics.length > 0);
   shelf.fabrics.forEach((f, i) => {
     const n = f.pattern.threads.length;
     const w = Math.max(26, Math.min(220, Math.round(n * 5 * (projectBpm / (f.bpm ?? projectBpm)))));
@@ -1084,7 +1117,7 @@ function dragStored(el: HTMLCanvasElement, i: number) {
   let x0 = 0, y0 = 0, moved = false, ghost: HTMLCanvasElement | null = null, to = -1;
   const line = document.createElement('div');
   line.className = 'drop-line';
-  el.addEventListener('pointerdown', (e) => { el.setPointerCapture(e.pointerId); x0 = e.clientX; y0 = e.clientY; moved = false; to = -1; });
+  el.addEventListener('pointerdown', (e) => { el.setPointerCapture(e.pointerId); x0 = e.clientX; y0 = e.clientY; moved = false; to = -1; drawerDrag = true; });
   el.addEventListener('pointermove', (e) => {
     if (!el.hasPointerCapture(e.pointerId)) return;
     if (Math.hypot(e.clientX - x0, e.clientY - y0) > 6) moved = true;
@@ -1112,6 +1145,8 @@ function dragStored(el: HTMLCanvasElement, i: number) {
     ghost?.remove();
     ghost = null;
     line.remove();
+    drawerDrag = false;
+    if (moved) openDrawer(false, 200);
     if (!moved) { shelfSel = shelfSel === i ? -1 : i; tableSel = -1; renderTable(); updateLevel(); return; }
     if (to < 0 || items.length >= MAX_FABRICS) return;
     const f = shelf.fabrics[i], open = items[cur].id;
@@ -1196,7 +1231,7 @@ function pulseThread() {
   cardEls().forEach((card, i) => {
     const bead = card.querySelector<HTMLElement>('.card-n'), pic = card.querySelector<HTMLElement>('.card-pic');
     if (!bead || !pic || !items[i] || items[i].bpm !== null) return;
-    const y = card.offsetTop + pic.offsetTop, tx = card.offsetLeft + 19;
+    const y = card.offsetTop + pic.offsetTop, tx = card.offsetLeft + clothPad(pic.offsetWidth / items[i].history.current.threads.length);
     const far = reach(y) + (y === ys[0] ? Math.abs(tx - kx) : tx - x);
     bead.animate([{ background: 'var(--bg)', color: 'var(--text)' }, { background: 'var(--caramel)', color: 'var(--bg)', offset: 0.25 }, { background: 'var(--bg)', color: 'var(--text)' }],
       { duration: 520, delay: (far / speed) * 1000 });
@@ -1206,7 +1241,7 @@ window.addEventListener('resize', () => { if (tableOpen && !tableBusy) renderTab
 
 /** Drag a card by its number to a new place in the order. */
 function dragCard(handle: HTMLElement, card: HTMLElement, i: number) {
-  let x0 = 0, y0 = 0, moved = false, to = i;
+  let x0 = 0, y0 = 0, moved = false, to = i, ghost: HTMLCanvasElement | null = null, home: DOMRect | null = null;
   const line = document.createElement('div');
   line.className = 'drop-line';
   handle.addEventListener('pointerdown', (e) => { handle.setPointerCapture(e.pointerId); x0 = e.clientX; y0 = e.clientY; moved = false; to = i; });
@@ -1214,11 +1249,24 @@ function dragCard(handle: HTMLElement, card: HTMLElement, i: number) {
     if (!handle.hasPointerCapture(e.pointerId)) return;
     if (Math.hypot(e.clientX - x0, e.clientY - y0) > 6) moved = true;
     if (!moved) return;
-    card.classList.add('dragging');
-    card.style.transform = `translate(${e.clientX - x0}px, ${e.clientY - y0}px)`;
+    // Picked up: a copy of its cloth follows the pointer (over everything, the drawer too),
+    // and the fabric itself waits, faint, in its place.
+    const src = card.querySelector<HTMLCanvasElement>('.card-pic')!;
+    if (!ghost) {
+      home = src.getBoundingClientRect();
+      ghost = document.createElement('canvas');
+      ghost.className = 'stored ghost';
+      ghost.width = src.width; ghost.height = src.height;
+      ghost.style.width = src.style.width; ghost.style.height = src.style.height;
+      ghost.getContext('2d')!.drawImage(src, 0, 0);
+      document.body.append(ghost);
+      card.classList.add('dragging');
+    }
+    ghost.style.transform = `translate(${home!.left + e.clientX - x0}px, ${e.clientY - 22}px)`; // held near its top edge, so it goes where the pointer goes
     // Over the shelf it would be put away; anywhere else it lands among the other fabrics.
+    openDrawer(items.length > 1); // picked up: the drawer slides out to offer itself
     const away = overShelf(e.clientY) && items.length > 1;
-    shelfEl.classList.toggle('over', away);
+    drawer.classList.toggle('over', away);
     if (away) { to = -1; line.remove(); return; }
     const place = dropPlace(e.clientX, e.clientY, card);
     to = place.to;
@@ -1231,9 +1279,11 @@ function dragCard(handle: HTMLElement, card: HTMLElement, i: number) {
   });
   const end = () => {
     line.remove();
+    ghost?.remove();
+    ghost = null;
     card.classList.remove('dragging');
-    card.style.transform = '';
-    shelfEl.classList.remove('over');
+    drawer.classList.remove('over');
+    if (moved) openDrawer(false, 500);
     if (!moved) { shelfSel = -1; return pickCard(i); }
     if (to < 0) return storeFabric(i);
     const open = items[cur].id;
@@ -1739,7 +1789,7 @@ function tick() {
     : items.length > 1 ? 'Left: on to the next fabric. Right: out to all the fabrics' : 'Out to the table of fabrics';
   const anySolo = ROWS.some((t) => mix[t]?.solo);
   const quiet = ROWS.map((t) => !!mix[t]?.mute || (anySolo && !mix[t]?.solo));
-  renderer.draw(p, layout, { ...view, rect: selRect(), quiet });
+  renderer.draw(p, layout, { ...view, rect: selRect(), quiet, endX: endAnchor?.x });
 }
 
 updatePanel();

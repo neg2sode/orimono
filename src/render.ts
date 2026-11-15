@@ -27,6 +27,8 @@ export interface ViewState {
   hoverRegion?: Rect | null;
   /** The end "+" that was just pressed: pressed again in the same place, it adds a cell. */
   endAdds?: 'front' | 'back' | null;
+  /** Where that press was (x): a single "+" waits there, like the one on a number. */
+  endX?: number;
 }
 
 interface Wobble { amp: number; t0: number; freq: number; tau: number }
@@ -445,8 +447,22 @@ export class Renderer {
     // New-group "+" at both ends: always visible, brighter on hover.
     for (const end of ['front', 'back'] as const) {
       if (L.u > 0) break; // groups aren't changed from inside a region
-      const hot = h.kind === end;
       const x = end === 'front' ? xa - 10 : xb + 10;
+      if (s.endAdds === end && s.endX !== undefined) {
+        // Just pressed: under the pointer there is now a single "+" for more cells in the new
+        // group, drawn like the "+" on a number (with no "–" beneath it).
+        ctx.fillStyle = UI.text;
+        ctx.globalAlpha = 0.16;
+        roundRect(ctx, s.endX - pillW / 2, ny - pillH / 2, pillW, pillH, 5);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.font = `600 14px ${FONT}`;
+        ctx.fillStyle = UI.text;
+        ctx.fillText('+', s.endX, ny + 0.5);
+        tooltip(ctx, s.endX + (end === 'front' ? -pillW / 2 : pillW / 2), L.numTop - 4, 'add a cell', end === 'front' ? 'left' : 'right');
+        if (Math.abs(x - s.endX) < 24) continue; // it stands where the group "+" was
+      }
+      const hot = h.kind === end && s.endAdds !== end;
       ctx.fillStyle = hot ? UI.play : UI.border;
       ctx.globalAlpha = hot ? 1 : 0.55;
       roundRect(ctx, x - 8, ny - 8, 16, 16, 8);
@@ -455,7 +471,7 @@ export class Renderer {
       ctx.fillStyle = UI.bg;
       ctx.font = `700 13px ${FONT}`;
       ctx.fillText('+', x, ny + 0.5);
-      if (hot) tooltip(ctx, end === 'front' ? x - 8 : x + 8, L.numTop - 4, s.endAdds === end ? 'add a cell (move away for another group)' : end === 'front' ? 'new group at start' : 'new group at end', end === 'front' ? 'left' : 'right');
+      if (hot) tooltip(ctx, end === 'front' ? x - 8 : x + 8, L.numTop - 4, end === 'front' ? 'new group at start' : 'new group at end', end === 'front' ? 'left' : 'right');
     }
 
     // Gap targets: ✂ split, ⋈ merge.

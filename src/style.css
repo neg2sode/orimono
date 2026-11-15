@@ -160,40 +160,52 @@ button:focus:not(:focus-visible) { outline: none; }
    seam between neighbours. The tempo thread runs over each line and back to the next. */
 #table { position: absolute; inset: 0; overflow: auto; z-index: 2; background: var(--bg); }
 #table[hidden] { display: none; }
-#cards { position: relative; display: flex; flex-wrap: wrap; align-content: flex-start; row-gap: 14px; padding: 0 36px; margin: 24px 18px 80px; }
-/* The shelf: the band above the table, where the tools sit among the threads. It holds fabrics
-   put away for later, and scrolls sideways on its own. */
-#shelf { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; height: 76px; padding: 0 18px;
-  background: var(--panel); border-bottom: 1px solid #00000040; overflow-x: auto; overflow-y: hidden; }
-#shelf.over { box-shadow: inset 0 0 0 2px var(--caramel); }
-.shelf-hint { color: var(--dim); font-size: 12px; }
+#cards { position: relative; display: flex; flex-wrap: wrap; align-content: flex-start; align-items: flex-end; row-gap: 14px; padding: 0 36px; margin: 24px 18px 80px; }
+/* The shelf is a drawer above the toolbar. Shut, it is out of sight (only its lip shows once
+   something is in it); it slides down over the toolbar when a fabric is picked up. */
+#drawer { position: fixed; left: 0; right: 0; top: 0; z-index: 40; display: none; transform: translateY(-100%); transition: transform 0.26s cubic-bezier(0.3, 0.8, 0.3, 1); }
+body.at-table #drawer { display: block; }
+#drawer.has { transform: translateY(calc(-100% + 9px)); }
+#drawer.open { transform: none; }
+#shelf { display: flex; align-items: center; gap: 10px; height: 84px; padding: 0 18px; overflow-x: auto; overflow-y: hidden;
+  background: #1c1814; box-shadow: inset 0 10px 16px -8px #000c, inset 0 -6px 10px -6px #0008; }
+.drawer-lip { height: 14px; background: var(--panel); border-top: 1px solid #ffffff14; border-bottom: 1px solid #000a; box-shadow: 0 6px 14px #0009; display: flex; justify-content: center; align-items: center; cursor: pointer; }
+.drawer-lip i { width: 54px; height: 4px; border-radius: 2px; background: var(--border); }
+#drawer.over .drawer-lip { background: var(--caramel); }
+#drawer.over .drawer-lip i { background: var(--bg); }
+#drawer.over #shelf { box-shadow: inset 0 10px 16px -8px #000c, inset 0 0 0 2px var(--caramel); }
 .stored { flex: none; display: block; cursor: grab; touch-action: none; outline: 1px solid #ffffff24; outline-offset: -1px; }
 .stored:hover { outline-color: var(--secondary); }
 .stored.sel { outline-color: var(--text); }
-.stored.ghost { position: fixed; left: 0; top: 0; z-index: 30; pointer-events: none; box-shadow: 0 10px 30px #000c; outline-color: var(--text); }
+.stored.ghost { position: fixed; left: 0; top: 0; z-index: 60; pointer-events: none; box-shadow: 0 10px 30px #000c; outline-color: var(--text); }
 .tempo-thread path.pulse { stroke: var(--text); stroke-width: 2.5; opacity: 1; }
 .tempo-thread { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 .tempo-thread path { fill: none; stroke: var(--caramel); stroke-width: 1.5; stroke-linecap: round; opacity: 0.75; }
 .card { position: relative; }
 /* Above each fabric: its number bead, with a tie down to the strand that runs along the top
    edge of the cloth (where the shuttle glides). */
-.lane { position: relative; height: 58px; }
+.lane { position: relative; }
 .tempo-thread { z-index: 2; }
-.card-n { position: absolute; left: 4px; top: 0; width: 30px; height: 30px; border-radius: 50%; padding: 0; cursor: grab; touch-action: none; font-weight: 600; font-size: 13px; background: var(--bg); border-color: var(--caramel); z-index: 1; }
+.card-n { position: absolute; top: 0; width: 26px; height: 26px; border-radius: 50%; padding: 0; cursor: grab; touch-action: none; font-weight: 600; font-size: 12px; background: var(--bg); border-color: var(--caramel); z-index: 1; }
 .card.sel .card-n { background: var(--text); color: var(--bg); border-color: var(--text); }
-/* The tie: a thread from the bead down to the strand. Cutting it happens low on the tie, well
-   clear of the number; cut, it leaves two loose ends. */
-.card:not(.add) .lane::before { content: ''; position: absolute; left: 18.25px; top: 30px; width: 1.5px; height: 28px; background: var(--caramel); }
-.card.cut .lane::before { background: linear-gradient(var(--dim) 0 8px, transparent 8px 21px, var(--caramel) 21px); }
-.tie { position: absolute; left: 6px; top: 40px; width: 26px; height: 18px; border: none; border-radius: 0; padding: 0; background: none; }
-.tie::after { content: attr(data-mark); position: absolute; left: 100%; top: 1px; font-size: 13px; color: var(--text); opacity: 0; transition: opacity 0.15s; }
-.tie:hover::after { opacity: 1; }
 .card.cut .card-n { border-color: var(--dim); }
+/* The tie and its bow. Cut, the bow comes undone and the two ends swing loose. */
+.tie-art { position: absolute; top: 26px; overflow: visible; pointer-events: none; }
+.tie-art path, .tie-art circle { fill: none; stroke: var(--caramel); stroke-width: 1.5; stroke-linecap: round; }
+.tie-art circle { fill: var(--caramel); stroke: none; }
+.tie-art .tie-up, .tie-art .tie-down, .tie-art .bow { transform-box: view-box; transition: transform 0.5s cubic-bezier(0.3, 1.9, 0.5, 1), opacity 0.2s, stroke 0.3s; }
+.card.cut .tie-art .bow { transform: scale(0) rotate(40deg); opacity: 0; transition: transform 0.25s ease-in, opacity 0.25s; }
+.card.cut .tie-art .tie-up { transform: rotate(-14deg) scaleY(0.82); stroke: var(--dim); }
+.card.cut .tie-art .tie-down { transform: rotate(22deg) scaleY(0.6); }
+.tie { position: absolute; width: 26px; height: 20px; border: none; border-radius: 50%; padding: 0; background: none; z-index: 1; }
+.tie:hover { background: #ffffff14; }
+.tie::after { content: attr(data-mark); position: absolute; left: calc(100% + 2px); top: 2px; font-size: 13px; color: var(--text); opacity: 0; transition: opacity 0.15s; }
+.tie:hover::after { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .tie-art .tie-up, .tie-art .tie-down, .tie-art .bow { transition: none !important; } }
 .card-pic { display: block; outline: 1px solid #ffffff24; outline-offset: -1px; cursor: zoom-in; }
 .card-pic:hover { outline-color: var(--secondary); }
 .card.sel .card-pic { outline-color: var(--text); }
-.card.dragging { z-index: 6; }
-.card.dragging .card-pic { box-shadow: 0 10px 30px #000c; outline-color: var(--text); }
+.card.dragging { opacity: 0.3; }
 .card.dragging .card-n { cursor: grabbing; }
 .card-add { width: 100%; border-style: dashed; border-radius: 0; color: var(--dim); font-size: 20px; }
 /* The shuttle rides the strand; over a fabric a fine line drops through the cloth, and while
@@ -203,7 +215,7 @@ button:focus:not(:focus-visible) { outline: none; }
 .shuttle.trail::before { content: ''; position: absolute; right: 0; top: -1px; width: 150px; height: 2px; background: linear-gradient(to right, transparent, var(--text)); opacity: 0.7; }
 .shuttle i { position: absolute; left: -13px; top: -6px; width: 26px; height: 11px; background: var(--text); clip-path: polygon(0 50%, 22% 0, 78% 0, 100% 50%, 78% 100%, 22% 100%); }
 .shuttle.rest i { pointer-events: auto; cursor: grab; touch-action: none; }
-.shuttle.rest i::after { content: ''; position: absolute; inset: -10px; }
+.shuttle.rest i::after { content: ''; position: absolute; inset: -6px; }
 .drop-line { position: absolute; width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; z-index: 5; }
 
 .zoom .here { color: var(--text); }
