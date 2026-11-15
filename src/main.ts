@@ -109,6 +109,11 @@ let shiftHeld = false;
 // After a "+" / "–" click, column widths hold still until the pointer moves, so the same number
 // stays under the pointer and can be clicked again and again.
 let stripAnchor: { x: number; y: number; colW: number } | null = null;
+// After an end "+" makes a new group, pressing again in the same place adds a cell to that
+// group; a new group needs the pointer (or the tap) to go somewhere else first.
+let endAnchor: { x: number; y: number; end: 'front' | 'back'; p: Pattern } | null = null;
+// (Only while the pattern is still as that press left it: not after an undo or another edit.)
+const atEndAnchor = (x: number, y: number) => !!endAnchor && endAnchor.p === history.current && Math.hypot(x - endAnchor.x, y - endAnchor.y) < 14;
 const selecting = () => !fibre && (view.tool === 'select' || shiftHeld);
 
 // Fibre level: the view is inside one zoomed region (a rectangle of cells split into fibres).
@@ -444,7 +449,7 @@ function updateLevel() {
     for (let ti = r.t0; ti <= r.t1; ti++) for (let ri = r.r0; ri <= r.r1; ri++) z = Math.max(z, zoomOf(pattern(), ti, ROWS[ri]));
     return z;
   };
-  $('fib-less').onclick = () => void setFactor(stepBase() - 1);
+  $('fib-less').onclick = () => void setFactor(Math.min(MAX_ZOOM, stepBase() - 1));
   $('fib-more').onclick = () => void setFactor(stepBase() + 1);
   // One button, one way at a time: in to fibres with a selection, out to fabric without one,
   // and back to the threads from either.
@@ -1253,6 +1258,7 @@ canvas.addEventListener('pointerdown', (e) => {
   const t = hitTest(layout, pattern(), x, y);
   canvas.setPointerCapture(e.pointerId);
   lastPointer = e.pointerType;
+  if (!atEndAnchor(x, y)) { endAnchor = null; view.endAdds = null; }
 
   if (t.kind === 'out') return leaveFibre();
 
@@ -1328,8 +1334,10 @@ canvas.addEventListener('pointerdown', (e) => {
     return;
   }
 
-  if (t.kind !== 'none') gesture = { kind: 'strip', target: t };
+  if (atEndAnchor(x, y)) gesture = { kind: 'strip', target: { kind: endAnchor!.end } }; // the same place again, wherever the "+" has moved to
+  else if (t.kind !== 'none') gesture = { kind: 'strip', target: t };
   else clearSelection();
+  if (!atEndAnchor(x, y)) { endAnchor = null; view.endAdds = null; }
 });
 
 function startPluck() {
@@ -1348,7 +1356,8 @@ canvas.addEventListener('pointermove', (e) => {
   // Up/down between + and – keeps the anchor; moving sideways or leaving the number lane lets go.
   if (stripAnchor && (Math.abs(x - stripAnchor.x) > 4 || !inNumberLane(layout, y))) stripAnchor = null;
   else if (stripAnchor) stripAnchor.y = y;
-  const t = hitTest(layout, pattern(), x, y);
+  if (endAnchor && e.pointerType !== 'touch' && Math.hypot(x - endAnchor.x, y - endAnchor.y) > 4) { endAnchor = null; view.endAdds = null; }
+  const t = endAnchor && atEndAnchor(x, y) ? { kind: endAnchor.end } as Target : hitTest(layout, pattern(), x, y);
   if (!gesture) {
     const into = !fibre && !selecting() && t.kind === 'cell' && zoomOf(pattern(), t.ti, ROWS[t.ri]) > 1;
     view.hoverRegion = into && t.kind === 'cell' ? regionAt(pattern(), t.ti, t.ri) : null;
@@ -1435,15 +1444,27 @@ function endGesture(e: PointerEvent) {
     view.drop = null;
     showActions();
   } else if (g.kind === 'strip') {
-    const t = e.pointerType === 'touch' && inNumberLane(layout, y) ? touchStripTarget(layout, x) : hitTest(layout, pattern(), x, y);
+    const again = atEndAnchor(x, y) && (g.target.kind === 'front' || g.target.kind === 'back');
+    const t = again ? g.target : e.pointerType === 'touch' && inNumberLane(layout, y) ? touchStripTarget(layout, x) : hitTest(layout, pattern(), x, y);
     if (JSON.stringify(t) !== JSON.stringify(g.target)) return;
     const p = pattern();
+    if (again && endAnchor) {
+      // The new group grows by a cell: at its end for the back "+", at its start for the front one.
+      const end = endAnchor;
+      applyStructure(insertAfter(p, end.end === 'back' ? p.threads.length - 1 : 0));
+      endAnchor = { ...end, p: pattern() };
+      view.endAdds = end.end;
+      return;
+    }
     if (t.kind === 'add' || t.kind === 'del') {
       if (e.pointerType !== 'touch') stripAnchor = { x, y, colW: layout.colW };
       applyStructure(t.kind === 'add' ? insertAfter(p, t.ti) : deleteCell(p, t.ti));
     }
-    else if (t.kind === 'front') applyStructure(insertFront(p));
-    else if (t.kind === 'back') applyStructure(insertBack(p));
+    else if (t.kind === 'front' || t.kind === 'back') {
+      applyStructure(t.kind === 'front' ? insertFront(p) : insertBack(p));
+      endAnchor = { x, y, end: t.kind, p: pattern() };
+      view.endAdds = t.kind;
+    }
     else if (t.kind === 'split') applyStructure(split(p, t.g));
     else if (t.kind === 'merge') applyStructure(merge(p, t.g));
   }

@@ -243,10 +243,10 @@ describe('zoom: threads into fibres (§8.2, scenario 10)', () => {
     expect(zoomPlan(p, cell, 1).changed).toBe(0);
   });
 
-  it('only the selected rows and threads are split, up to ×12', () => {
-    const p = zoomRect(fresh(), { t0: 2, t1: 3, r0: 15, r1: 16 }, 12);
-    expect([zoomOf(p, 1, 'BD'), zoomOf(p, 2, 'BD'), zoomOf(p, 3, 'SD'), zoomOf(p, 4, 'SD'), zoomOf(p, 2, 'FT')]).toEqual([1, 12, 12, 1, 1]);
-    expect(zoomRect(p, cell, 13)).toBe(p);
+  it('only the selected rows and threads are split, up to ×7', () => {
+    const p = zoomRect(fresh(), { t0: 2, t1: 3, r0: 15, r1: 16 }, 7);
+    expect([zoomOf(p, 1, 'BD'), zoomOf(p, 2, 'BD'), zoomOf(p, 3, 'SD'), zoomOf(p, 4, 'SD'), zoomOf(p, 2, 'FT')]).toEqual([1, 7, 7, 1, 1]);
+    expect(zoomRect(p, cell, 8)).toBe(p);
   });
 
   it('Clear empties a zoomed cell but leaves it zoomed', () => {

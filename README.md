@@ -26,10 +26,28 @@ Other commands:
 - **Select (S, or hold Shift):** drag a rectangle in the grid (Clear, Copy, Paste, Random),
   or click/drag the coloured bars under the numbers to pick groups (Merge, Duplicate, Delete, drag to move).
 - **Number strip:** hover a number for "+" (add an empty cell after it, top half) and "–" (delete it, bottom half).
-  Hover a gap: ✂ splits a group there, ⋈ merges two groups. The gap before cell 1 adds a new group.
+  Hover between two numbers: ✂ splits a group there, ⋈ merges two groups. The "+" at either end adds a new group;
+  press it again in the same place to add cells to that group.
+- **Row names:** with Select, click a row's name for its level fader, mute and solo.
+- **Random:** fills your groups (or the selection) with a beat in one of six styles. Notes you drew yourself stay.
 - **Tempo knob:** drag up/down (Shift for fine), scroll, or double-click to type.
-- Space: Play/Stop · ⌘Z / ⇧⌘Z: undo/redo · Delete: delete selection · M: merge · ⌘D: duplicate · Esc: deselect.
-- Everything autosaves in the browser. **New** starts again from 4+4+4+4 (undoable).
+- Space: Play/Stop · ⌘Z / ⇧⌘Z: undo/redo · Delete: clear selection · M: merge · ⌘D: duplicate · Esc: deselect.
+- Everything autosaves in the browser. Click the length readout to start a fabric from scratch.
+
+### Three levels: fibres, threads, fabrics
+
+The button at the top right shows where you are and where a press takes you.
+
+- **Fibres:** select some cells and press the button (or Enter) to go inside them. Each thread there is split into
+  finer steps (×2 to ×7, chosen with the stepper), for rolls, triplets and polyrhythms. Draw on the fibres, press
+  Play to hear just that region once, and use the tempo knob to listen slower. Press outside, or Esc, to come back.
+  Out among the threads a region shows as a soft patch: press it to go in.
+- **Fabrics:** one whole screen of threads is a fabric. Press the right half of the button to zoom out to the table,
+  where fabrics lie side by side in playing order. Click a fabric to go in; click its number to pick it (Duplicate,
+  Delete) or drag the number to move it; the dashed "+" adds a blank one. Play runs a shuttle through all of them,
+  round and round, from wherever the shuttle rests (drag it to choose).
+  The thread along the top is the table's tempo: cut (✂) a fabric's tie to give it a tempo of its own, join (⋈) to
+  follow the table again. Among the threads, the left half of the button slides on to the next fabric.
 
 ## Code map
 

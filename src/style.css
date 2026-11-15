@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark; /* already dark: browsers and darkening extensions should leave it be */
   --bg: #151a1f;
   --panel: #2f2923;
   --border: #69757f;
@@ -212,7 +213,7 @@ button:focus:not(:focus-visible) { outline: none; }
 }
 #zoom-pop[hidden] { display: none; }
 #zoom-pop p { margin: 0; line-height: 1.4; color: var(--secondary); }
-.zoom-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-top: 8px; }
+.zoom-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 8px; }
 .zoom-grid button { padding: 6px 0; font-size: 12px; }
 .zoom-grid button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
 #ask {

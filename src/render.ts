@@ -25,6 +25,8 @@ export interface ViewState {
   glowRect: Rect | null;
   /** Thread level: the zoomed region under the pointer (a press goes inside it). */
   hoverRegion?: Rect | null;
+  /** The end "+" that was just pressed: pressed again in the same place, it adds a cell. */
+  endAdds?: 'front' | 'back' | null;
 }
 
 interface Wobble { amp: number; t0: number; freq: number; tau: number }
@@ -453,7 +455,7 @@ export class Renderer {
       ctx.fillStyle = UI.bg;
       ctx.font = `700 13px ${FONT}`;
       ctx.fillText('+', x, ny + 0.5);
-      if (hot) tooltip(ctx, end === 'front' ? x - 8 : x + 8, L.numTop - 4, end === 'front' ? 'new group at start' : 'new group at end', end === 'front' ? 'left' : 'right');
+      if (hot) tooltip(ctx, end === 'front' ? x - 8 : x + 8, L.numTop - 4, s.endAdds === end ? 'add a cell (move away for another group)' : end === 'front' ? 'new group at start' : 'new group at end', end === 'front' ? 'left' : 'right');
     }
 
     // Gap targets: ✂ split, ⋈ merge.
