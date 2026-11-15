@@ -234,6 +234,25 @@ function togglePlay() {
   playEnded = 0;
   showPlaying();
   markPlaying();
+  window.setTimeout(checkSound, 500);
+}
+
+// If Play is on but the browser has not let the sound start (or the sounds never loaded), say
+// so on screen instead of playing silently.
+function checkSound() {
+  const blocked = scheduler.playing && engine.ctx.state !== 'running';
+  let note = document.getElementById('sound-note');
+  if (!blocked) { note?.remove(); return; }
+  if (!note) {
+    note = document.createElement('div');
+    note.id = 'sound-note';
+    document.body.append(note);
+  }
+  note.textContent = `The browser is holding the sound back (audio is "${engine.ctx.state}"). Click anywhere to let it through.`;
+}
+// Any press or key is a chance to wake the sound, not only Play.
+for (const type of ['pointerdown', 'keydown'] as const) {
+  window.addEventListener(type, () => { engine.resume(); window.setTimeout(checkSound, 300); }, true);
 }
 scheduler.onLoop = (time) => {
   if (!tableOpen || items.length < 2) return;
@@ -886,8 +905,10 @@ function moveShuttle() {
   const k = cameFrom ? items.findIndex((it) => it.id === cameFrom!.id) : -1;
   if (cameFrom && k >= 0) {
     const gk = clothAt(k), xo = gk.right + gk.pad + (now - cameFrom.time) * pps;
-    if (!(i === k + 1 && gk.y === g.y) && xo <= far) showShuttle(2, xo, gk, Math.max(0, Math.min(1, (far - xo) / 60)), false, true);
-    else { hideShuttle(2); if (xo > far) cameFrom = null; }
+    // It fades out within a short run past the end of the cloth, however much room is left.
+    const run = Math.min(70, far - gk.right - gk.pad), gone = xo - gk.right - gk.pad;
+    if (!(i === k + 1 && gk.y === g.y) && gone < run) showShuttle(2, xo, gk, Math.max(0, 1 - gone / run), false, true);
+    else { hideShuttle(2); if (gone >= run) cameFrom = null; }
   } else hideShuttle(2);
 }
 
@@ -1556,3 +1577,11 @@ requestAnimationFrame(frame);
 
 // Development-only handle for automated checks; not present in production builds.
 if (import.meta.env.DEV) Object.assign(window, { __rg: { engine, scheduler, get history() { return history; }, get items() { return items; } } });
+// For tracking down sound trouble: type orimonoSound() in the browser console.
+Object.assign(window, {
+  orimonoSound: () => ({
+    audio: engine.ctx.state, clock: engine.ctx.currentTime, sampleRate: engine.ctx.sampleRate, soundsLoaded: engine.loaded,
+    playing: scheduler.playing, tempo: scheduler.bpm?.(), fabrics: items.length,
+    quietRows: ROWS.filter((t) => mix[t]?.mute || (ROWS.some((x) => mix[x]?.solo) && !mix[t]?.solo)), levels: mix,
+  }),
+});

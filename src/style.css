@@ -231,3 +231,6 @@ button:focus:not(:focus-visible) { outline: none; }
 #fabric-tools { display: none; }
 body.at-table #fabric-tools { display: flex; }
 body.at-table .thread-tool { display: none; }
+
+#sound-note { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 20; background: var(--panel); color: var(--warn);
+  border: 1px solid var(--warn); border-radius: 8px; padding: 8px 14px; font-size: 13px; }
