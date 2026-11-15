@@ -161,19 +161,28 @@ button:focus:not(:focus-visible) { outline: none; }
 #table { position: absolute; inset: 0; overflow: auto; z-index: 2; background: var(--bg); }
 #table[hidden] { display: none; }
 #cards { position: relative; display: flex; flex-wrap: wrap; align-content: flex-start; align-items: flex-end; row-gap: 14px; padding: 0 36px; margin: 24px 18px 80px; }
-/* The shelf is a drawer above the toolbar. Shut, it is out of sight (only its lip shows once
-   something is in it); it slides down over the toolbar when a fabric is picked up. */
-#drawer { position: fixed; left: 0; right: 0; top: 0; z-index: 40; display: none; transform: translateY(-100%); transition: transform 0.26s cubic-bezier(0.3, 0.8, 0.3, 1); }
-body.at-table #drawer { display: block; }
-#drawer.has { transform: translateY(calc(-100% + 9px)); }
-#drawer.open { transform: none; }
-#shelf { display: flex; align-items: center; gap: 10px; height: 84px; padding: 0 18px; overflow-x: auto; overflow-y: hidden;
-  background: #1c1814; box-shadow: inset 0 10px 16px -8px #000c, inset 0 -6px 10px -6px #0008; }
-.drawer-lip { height: 14px; background: var(--panel); border-top: 1px solid #ffffff14; border-bottom: 1px solid #000a; box-shadow: 0 6px 14px #0009; display: flex; justify-content: center; align-items: center; cursor: pointer; }
-.drawer-lip i { width: 54px; height: 4px; border-radius: 2px; background: var(--border); }
-#drawer.over .drawer-lip { background: var(--caramel); }
-#drawer.over .drawer-lip i { background: var(--bg); }
-#drawer.over #shelf { box-shadow: inset 0 10px 16px -8px #000c, inset 0 0 0 2px var(--caramel); }
+/* The shelf is a wooden drawer built into the top of the toolbar: shut, only its front edge and
+   brass handle show (once it holds something); pulled out, it sits above the toolbar and both
+   stay in view. */
+#drawer { display: none; flex-direction: column; justify-content: flex-end; flex: none; height: 0; overflow: hidden; transition: height 0.3s cubic-bezier(0.3, 0.8, 0.3, 1);
+  background: #17110c; }
+body.at-table #drawer { display: flex; }
+#drawer.has { height: 13px; }
+#drawer.open { height: 101px; }
+#shelf { flex: none; display: flex; align-items: center; gap: 10px; height: 88px; padding: 0 22px; overflow-x: auto; overflow-y: hidden;
+  background:
+    repeating-linear-gradient(92deg, #0000 0 17px, #00000026 17px 18px, #0000 18px 43px, #ffffff07 43px 44px),
+    linear-gradient(#241a11, #2c2015);
+  box-shadow: inset 0 12px 16px -8px #000d, inset 12px 0 14px -10px #000a, inset -12px 0 14px -10px #000a; }
+.drawer-lip { flex: none; height: 13px; display: flex; justify-content: center; align-items: center; cursor: pointer;
+  background:
+    repeating-linear-gradient(90.6deg, #0000 0 31px, #00000030 31px 32px, #0000 32px 77px, #ffffff0d 77px 78px),
+    linear-gradient(#6b4a2d, #4d341f);
+  border-top: 1px solid #8a6540; border-bottom: 1px solid #1a110a; }
+.drawer-lip i { width: 64px; height: 6px; border-radius: 3px; background: linear-gradient(#e6c887, #9a7636); box-shadow: 0 1px 2px #000a, inset 0 1px 0 #fff5; }
+.drawer-lip:hover i { background: linear-gradient(#f3dca4, #b08a44); }
+#drawer.over #shelf { box-shadow: inset 0 12px 16px -8px #000d, inset 0 0 0 2px var(--caramel); }
+#drawer.over .drawer-lip i { background: linear-gradient(#fff3cf, #dba868); }
 .stored { flex: none; display: block; cursor: grab; touch-action: none; outline: 1px solid #ffffff24; outline-offset: -1px; }
 .stored:hover { outline-color: var(--secondary); }
 .stored.sel { outline-color: var(--text); }
@@ -197,10 +206,15 @@ body.at-table #drawer { display: block; }
 .card.cut .tie-art .bow { transform: scale(0) rotate(40deg); opacity: 0; transition: transform 0.25s ease-in, opacity 0.25s; }
 .card.cut .tie-art .tie-up { transform: rotate(-14deg) scaleY(0.82); stroke: var(--dim); }
 .card.cut .tie-art .tie-down { transform: rotate(22deg) scaleY(0.6); }
-.tie { position: absolute; width: 26px; height: 20px; border: none; border-radius: 50%; padding: 0; background: none; z-index: 1; }
-.tie:hover { background: #ffffff14; }
-.tie::after { content: attr(data-mark); position: absolute; left: calc(100% + 2px); top: 2px; font-size: 13px; color: var(--text); opacity: 0; transition: opacity 0.15s; }
-.tie:hover::after { opacity: 1; }
+.tie { position: absolute; width: 26px; height: 20px; border: none; border-radius: 50%; padding: 0; background: none; z-index: 1; cursor: grab; touch-action: none; }
+.card.sel .tie { cursor: pointer; }
+.card.sel .tie:hover { background: #ffffff14; }
+/* The cut (or tie) mark shows once the number is picked: beside the bow, or above the number
+   when the fabric is too short to have room beside it. */
+.tie::after { content: attr(data-mark); position: absolute; left: calc(100% + 2px); top: 2px; font-size: 13px; color: var(--text); opacity: 0; transition: opacity 0.15s; pointer-events: none; }
+.card.sel .tie::after { opacity: 0.7; }
+.card.sel .tie:hover::after { opacity: 1; }
+.card.narrow .tie::after { left: 50%; top: var(--above); transform: translateX(-50%); }
 @media (prefers-reduced-motion: reduce) { .tie-art .tie-up, .tie-art .tie-down, .tie-art .bow { transition: none !important; } }
 .card-pic { display: block; outline: 1px solid #ffffff24; outline-offset: -1px; cursor: zoom-in; }
 .card-pic:hover { outline-color: var(--secondary); }

@@ -407,7 +407,15 @@ export class Renderer {
       }
       ctx.globalAlpha = 1;
     }
+    // After an end "+" was pressed: the cell whose number is under the pointer (if any) shows
+    // the single "+" in place of its number.
+    let endPill = -1;
+    if (s.endAdds && s.endX !== undefined) {
+      const near = xs.reduce((b, x, i) => (Math.abs(x - s.endX!) < Math.abs(xs[b] - s.endX!) ? i : b), 0);
+      if (Math.abs(xs[near] - s.endX) < Math.min(22, L.colW / 2)) endPill = near;
+    }
     for (let ti = 0; ti < n; ti++) {
+      if (ti === endPill) continue;
       const x = xs[ti]; // a thread's number sits under its string
       if (reg) {
         const inside = ti >= reg.t0 && ti <= reg.t1;
@@ -450,16 +458,18 @@ export class Renderer {
       const x = end === 'front' ? xa - 10 : xb + 10;
       if (s.endAdds === end && s.endX !== undefined) {
         // Just pressed: under the pointer there is now a single "+" for more cells in the new
-        // group, drawn like the "+" on a number (with no "–" beneath it).
+        // group, drawn like the "+" on a number (with no "–" beneath it). If a cell's number
+        // is right there, the "+" stands in its place.
+        const px = endPill >= 0 ? xs[endPill] : s.endX;
         ctx.fillStyle = UI.text;
         ctx.globalAlpha = 0.16;
-        roundRect(ctx, s.endX - pillW / 2, ny - pillH / 2, pillW, pillH, 5);
+        roundRect(ctx, px - pillW / 2, ny - pillH / 2, pillW, pillH, 5);
         ctx.fill();
         ctx.globalAlpha = 1;
         ctx.font = `600 14px ${FONT}`;
         ctx.fillStyle = UI.text;
-        ctx.fillText('+', s.endX, ny + 0.5);
-        tooltip(ctx, s.endX + (end === 'front' ? -pillW / 2 : pillW / 2), L.numTop - 4, 'add a cell', end === 'front' ? 'left' : 'right');
+        ctx.fillText('+', px, ny + 0.5);
+        tooltip(ctx, px + (end === 'front' ? -pillW / 2 : pillW / 2), L.numTop - 4, 'add a cell', end === 'front' ? 'left' : 'right');
         if (Math.abs(x - s.endX) < 24) continue; // it stands where the group "+" was
       }
       const hot = h.kind === end && s.endAdds !== end;

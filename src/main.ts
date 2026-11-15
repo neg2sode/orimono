@@ -1025,14 +1025,58 @@ function renderTable() {
     tie.className = 'tie';
     tie.style.left = `${x0 - 13}px`;
     tie.style.top = `${26 + c - 10}px`;
+    tie.style.setProperty('--above', `${-(26 + c - 10) - 16}px`); // for the mark, when there is no room beside the bow
+    if (w < 44) card.classList.add('narrow');
+    const picked = i === tableSel;
     const label = () => {
-      tie.title = it.bpm === null ? 'Cut: this fabric keeps a tempo of its own (set it inside, with the tempo knob)' : `Tie: follow the table's tempo again (its own is ${it.bpm} BPM)`;
+      tie.title = !picked ? "A bow in the tie to the table's tempo. Pick the fabric's number to cut or tie it"
+        : it.bpm === null ? 'Cut: this fabric keeps a tempo of its own (set it inside, with the tempo knob)' : `Tie: follow the table's tempo again (its own is ${it.bpm} BPM)`;
       tie.dataset.mark = it.bpm === null ? '✂' : '⋈';
       n.title = `Fabric ${i + 1}, ${lengthOf(it)}${it.bpm !== null ? `, own tempo ${it.bpm} BPM` : ''}. Tap to pick, drag to move or to put away`;
     };
     label();
-    // Cutting keeps the tempo it had, so nothing moves: only the bow comes undone (or is tied).
-    tie.onclick = () => { it.bpm = it.bpm === null ? projectBpm : null; card.classList.toggle('cut', it.bpm !== null); label(); save(); updatePanel(); if (it.bpm === null) window.setTimeout(() => { if (tableOpen && !tableBusy) renderTable(); }, 560); };
+    // With the number picked, a press on the bow cuts (or ties) it. Otherwise the bow is just
+    // there to be played with: pull it sideways and let go, and it springs back like a string.
+    const up = art.querySelector<SVGPathElement>('.tie-up')!, down = art.querySelector<SVGPathElement>('.tie-down')!, bow = art.querySelector<SVGGElement>('.bow')!;
+    let spring = 0;
+    const pull = (dx: number) => {
+      up.setAttribute('d', `M16 0 L${16 + dx} ${c - 3}`);
+      down.setAttribute('d', `M${16 + dx} ${c + 3} L16 ${H}`);
+      bow.style.transition = dx ? 'none' : '';
+      bow.style.transform = dx ? `translateX(${dx}px)` : '';
+    };
+    const letGo = (from: number) => {
+      cancelAnimationFrame(spring);
+      const t0 = performance.now();
+      const step = () => {
+        const t = (performance.now() - t0) / 1000;
+        if (t > 0.8 || still()) return pull(0);
+        pull(from * Math.exp(-t / 0.16) * Math.cos(2 * Math.PI * 6 * t));
+        spring = requestAnimationFrame(step);
+      };
+      step();
+    };
+    let px = 0, pulled = 0, moved = false;
+    tie.addEventListener('pointerdown', (e) => { tie.setPointerCapture(e.pointerId); px = e.clientX; pulled = 0; moved = false; cancelAnimationFrame(spring); e.stopPropagation(); });
+    tie.addEventListener('pointermove', (e) => {
+      if (!tie.hasPointerCapture(e.pointerId) || it.bpm !== null) return;
+      if (Math.abs(e.clientX - px) > 3) moved = true;
+      pulled = Math.max(-13, Math.min(13, (e.clientX - px) * 0.7));
+      if (moved) pull(pulled);
+    });
+    tie.addEventListener('pointerup', () => {
+      if (moved) return letGo(pulled);
+      if (!picked) { if (it.bpm === null) letGo(7); return; }
+      // Cutting keeps the tempo it had, so nothing moves: only the bow comes undone (or is tied).
+      pull(0);
+      it.bpm = it.bpm === null ? projectBpm : null;
+      card.classList.toggle('cut', it.bpm !== null);
+      label();
+      save();
+      updatePanel();
+      if (it.bpm === null) window.setTimeout(() => { if (tableOpen && !tableBusy) renderTable(); }, 560);
+    });
+    tie.addEventListener('click', (e) => e.stopPropagation());
     lane.append(art, tie, n);
     const pic = document.createElement('canvas');
     pic.className = 'card-pic';
@@ -1090,10 +1134,19 @@ function openDrawer(on: boolean, after = 0) {
   drawerTimer = window.setTimeout(() => drawer.classList.toggle('open', on), after);
 }
 const overShelf = (clientY: number) => drawer.classList.contains('open') && clientY < drawer.getBoundingClientRect().bottom;
-let drawerDrag = false;
-drawer.addEventListener('pointerenter', () => openDrawer(true));
-drawer.addEventListener('pointerleave', () => { if (!drawerDrag) openDrawer(false, 250); });
-drawer.addEventListener('click', () => openDrawer(true));
+// The drawer and the toolbar are one piece of furniture: scroll up over either to pull the
+// drawer out above the toolbar (both stay in view), scroll down to push it back, or press its
+// handle. It also comes out by itself when a fabric is picked up.
+let heldOpen = false; // opened on purpose: it stays until it is shut on purpose
+const setDrawer = (on: boolean) => { heldOpen = on; openDrawer(on); };
+for (const el of [drawer, $('panel')]) {
+  el.addEventListener('wheel', (e) => {
+    if (!tableOpen || Math.abs(e.deltaY) < 4 || (e.target as HTMLElement).closest('#knob, #shelf')) return;
+    e.preventDefault();
+    setDrawer(e.deltaY < 0);
+  }, { passive: false });
+}
+drawer.querySelector<HTMLElement>('.drawer-lip')!.onclick = () => setDrawer(!drawer.classList.contains('open'));
 
 function renderShelf() {
   shelfEl.replaceChildren();
@@ -1117,7 +1170,7 @@ function dragStored(el: HTMLCanvasElement, i: number) {
   let x0 = 0, y0 = 0, moved = false, ghost: HTMLCanvasElement | null = null, to = -1;
   const line = document.createElement('div');
   line.className = 'drop-line';
-  el.addEventListener('pointerdown', (e) => { el.setPointerCapture(e.pointerId); x0 = e.clientX; y0 = e.clientY; moved = false; to = -1; drawerDrag = true; });
+  el.addEventListener('pointerdown', (e) => { el.setPointerCapture(e.pointerId); x0 = e.clientX; y0 = e.clientY; moved = false; to = -1; });
   el.addEventListener('pointermove', (e) => {
     if (!el.hasPointerCapture(e.pointerId)) return;
     if (Math.hypot(e.clientX - x0, e.clientY - y0) > 6) moved = true;
@@ -1145,8 +1198,6 @@ function dragStored(el: HTMLCanvasElement, i: number) {
     ghost?.remove();
     ghost = null;
     line.remove();
-    drawerDrag = false;
-    if (moved) openDrawer(false, 200);
     if (!moved) { shelfSel = shelfSel === i ? -1 : i; tableSel = -1; renderTable(); updateLevel(); return; }
     if (to < 0 || items.length >= MAX_FABRICS) return;
     const f = shelf.fabrics[i], open = items[cur].id;
@@ -1283,7 +1334,7 @@ function dragCard(handle: HTMLElement, card: HTMLElement, i: number) {
     ghost = null;
     card.classList.remove('dragging');
     drawer.classList.remove('over');
-    if (moved) openDrawer(false, 500);
+    if (moved && !heldOpen) openDrawer(false, 500);
     if (!moved) { shelfSel = -1; return pickCard(i); }
     if (to < 0) return storeFabric(i);
     const open = items[cur].id;
