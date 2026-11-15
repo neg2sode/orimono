@@ -223,10 +223,13 @@ function togglePlay() {
     const r = fibre.region; // inside a region: just the region, once
     scheduler.start({ from: r.t0, to: r.t1, rows: ROWS.slice(r.r0, r.r1 + 1) });
   } else {
-    // Among the threads the open fabric loops; out on the table the fabrics play in turn,
-    // starting from the picked one, round and round.
-    playId = items[tableOpen ? tableSel : cur].id;
-    scheduler.start();
+    // Among the threads the open fabric loops. Out on the table the fabrics play in turn, round
+    // and round, from wherever the shuttle rests.
+    const from = tableOpen ? startPlace() : { it: items[cur], index: 0 };
+    playId = from.it.id;
+    scheduler.start(undefined, from.index);
+    cameFrom = null;
+    shuttleAt = tableOpen ? { id: playId, index: from.index, time: scheduler.startTime } : null;
   }
   playEnded = 0;
   showPlaying();
@@ -306,6 +309,8 @@ $('random').onclick = (e) => {
   view.glowRect = area;
 };
 $('clear').onclick = doClearRect;
+$('fab-dup').onclick = () => { if (tableSel >= 0) duplicateFabric(tableSel); };
+$('fab-del').onclick = () => { if (tableSel >= 0) void deleteFabric(tableSel); };
 
 // ---------------------------------------------------------------- zoom (fibre · thread · fabric)
 
@@ -393,6 +398,10 @@ function updateLevel() {
   $('fibre-count').hidden = !inside;
   $<HTMLButtonElement>('tool-select').disabled = inside || tableOpen;
   for (const id of ['tool-draw', 'random', 'clear', 'length']) $<HTMLButtonElement>(id).disabled = tableOpen;
+  // On the table the thread tools make way for what can be done with a picked fabric.
+  document.body.classList.toggle('at-table', tableOpen);
+  $<HTMLButtonElement>('fab-dup').disabled = tableSel < 0;
+  $<HTMLButtonElement>('fab-del').disabled = tableSel < 0 || items.length < 2;
   $<HTMLButtonElement>('undo').disabled = tableOpen || !history.canUndo;
   $<HTMLButtonElement>('redo').disabled = tableOpen || !history.canRedo;
   if (fibre) {
@@ -461,7 +470,7 @@ function updateLevel() {
   $('zoom').onclick = (e) => {
     e.stopPropagation();
     if (diving() || tableBusy) return;
-    if (tableOpen) return closeTable(tableSel);
+    if (tableOpen) return closeTable(tableSel >= 0 ? tableSel : cur);
     if (fibre) return leaveFibre();
     const r = selRect();
     if (r) return enterFibre(r);
@@ -729,7 +738,7 @@ function doPaste() {
 const table = $('table'), cards = $('cards');
 let tableOpen = false; // out on the table of fabrics
 let tableBusy = false; // the view is on its way out or back in
-let tableSel = 0; // the picked fabric
+let tableSel = -1; // the picked fabric, or -1 for none
 let sliding = false;
 const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const DIVE = { duration: 520, easing: 'cubic-bezier(.65,0,.35,1)' };
@@ -800,39 +809,123 @@ const lengthOf = (it: Item) => `${(it.history.current.threads.length * threadSec
 
 function markPlaying() {
   cardEls().forEach((c, i) => c.classList.toggle('playing', scheduler.playing && items[i]?.id === playId));
-  if (!scheduler.playing) shuttleAt = null;
+  if (!scheduler.playing) { shuttleAt = null; cameFrom = null; }
 }
 
-// The shuttle: out on the table, playing is a shuttle carried across each fabric in turn, left
-// to right, leaving its thread behind. It follows the real playhead, thread by thread.
-let shuttleAt: { id: number; index: number; time: number } | null = null;
-const shuttle = document.createElement('div');
-shuttle.className = 'shuttle';
-shuttle.innerHTML = '<i></i>';
+// The shuttle. Out on the table, playing is a shuttle carried along the strand over each line of
+// fabrics, left to right, trailing its thread. It rests where playing will start (drag it to
+// choose), follows the real playhead, and never jumps: at the end of a line it runs on to the
+// right edge and fades, while the next one is already gliding in from the left edge of the line
+// below, arriving at that line's first fabric exactly on time.
+let playStart: { id: number; index: number } | null = null; // where the shuttle rests
+let shuttleAt: { id: number; index: number; time: number } | null = null; // the playhead: fabric, thread, when it began
+let cameFrom: { id: number; time: number } | null = null; // the fabric just left, and when
+let shuttleDrag = false;
+const shuttles = [0, 1, 2].map(() => {
+  const el = document.createElement('div');
+  el.className = 'shuttle';
+  el.innerHTML = '<i></i>';
+  return el;
+});
+
+function startPlace() {
+  const it = items.find((x) => x.id === playStart?.id) ?? items[0];
+  const index = it.id === playStart?.id ? Math.min(playStart.index, it.history.current.threads.length - 1) : 0;
+  return { it, index };
+}
+
+/** Where fabric i's cloth sits on the table. */
+function clothAt(i: number) {
+  const card = cardEls()[i], pic = card.querySelector<HTMLElement>('.card-pic')!, n = items[i].history.current.threads.length;
+  const cw = pic.offsetWidth / n;
+  return { left: card.offsetLeft, right: card.offsetLeft + pic.offsetWidth, y: card.offsetTop + pic.offsetTop, h: pic.offsetHeight, cw, pad: clothPad(cw), n };
+}
+
+function showShuttle(k: number, x: number, g: { y: number; h: number }, opacity: number, onCloth: boolean, trail: boolean) {
+  const el = shuttles[k];
+  if (!el.isConnected) cards.append(el);
+  el.style.transform = `translate(${x}px, ${g.y}px)`;
+  el.style.height = `${g.h}px`;
+  el.style.opacity = String(opacity);
+  el.classList.toggle('line', onCloth);
+  el.classList.toggle('trail', trail);
+  el.classList.toggle('rest', k === 0); // the leading shuttle can always be picked up
+}
+const hideShuttle = (k: number) => shuttles[k].remove();
+
 function moveShuttle() {
   for (const f of scheduler.due()) {
     if (!f.start) continue;
     const it = items.find((x) => x.history.current === f.of);
     const index = it ? f.of.threads.findIndex((t) => t.id === f.threadId) : -1;
-    if (it && index >= 0) shuttleAt = { id: it.id, index, time: f.time };
+    if (!it || index < 0) continue;
+    if (shuttleAt && (shuttleAt.id !== it.id || index < shuttleAt.index)) cameFrom = { id: shuttleAt.id, time: f.time };
+    shuttleAt = { id: it.id, index, time: f.time };
   }
+  if (!cardEls().length) return;
   const i = shuttleAt ? items.findIndex((it) => it.id === shuttleAt!.id) : -1;
-  const card = i >= 0 && scheduler.playing ? cardEls()[i] : null;
-  if (!card || !shuttleAt) { shuttle.remove(); return; }
-  const it = items[i], pic = card.querySelector<HTMLElement>('.card-pic')!;
-  const cw = pic.offsetWidth / it.history.current.threads.length;
-  const into = Math.min(1, (engine.ctx.currentTime - shuttleAt.time) / threadSeconds(bpmOf(it)));
-  if (shuttle.parentElement !== card) card.append(shuttle);
-  shuttle.style.top = `${pic.offsetTop}px`;
-  shuttle.style.height = `${pic.offsetHeight}px`;
-  shuttle.style.transform = `translateX(${pic.offsetLeft + clothPad(cw) + (shuttleAt.index + into) * cw}px)`;
+  if (!scheduler.playing || !shuttleAt || i < 0 || shuttleDrag) {
+    // At rest: waiting at the place playing will start from.
+    const { it, index } = startPlace(), g = clothAt(items.indexOf(it));
+    showShuttle(0, g.left + g.pad + index * g.cw, g, 1, true, false);
+    hideShuttle(1);
+    hideShuttle(2);
+    return;
+  }
+  const now = engine.ctx.currentTime, pps = pxPerSecond(), edge = 14, far = cards.clientWidth - 14;
+  const g = clothAt(i), sec = threadSeconds(bpmOf(items[i]));
+  const into = Math.max(0, Math.min(1, (now - shuttleAt.time) / sec));
+  showShuttle(0, g.left + g.pad + (shuttleAt.index + into) * g.cw, g, 1, true, true);
+  // The next fabric, when it is not simply the neighbour on the right: its shuttle comes in
+  // from the left edge, timed to reach the fabric's first thread as this one finishes.
+  const j = (i + 1) % items.length, gj = clothAt(j);
+  const x = gj.left + gj.pad - (g.n - shuttleAt.index - into) * sec * pps;
+  if (!(j === i + 1 && gj.y === g.y) && x >= edge) showShuttle(1, x, gj, Math.min(1, (x - edge) / 24), false, true);
+  else hideShuttle(1);
+  // The fabric just left, likewise: its shuttle runs on to the right edge and fades.
+  const k = cameFrom ? items.findIndex((it) => it.id === cameFrom!.id) : -1;
+  if (cameFrom && k >= 0) {
+    const gk = clothAt(k), xo = gk.right + gk.pad + (now - cameFrom.time) * pps;
+    if (!(i === k + 1 && gk.y === g.y) && xo <= far) showShuttle(2, xo, gk, Math.max(0, Math.min(1, (far - xo) / 60)), false, true);
+    else { hideShuttle(2); if (xo > far) cameFrom = null; }
+  } else hideShuttle(2);
+}
+
+// Drag the shuttle along the strands to choose where playing starts (it snaps to a thread).
+// Dragged while playing, it carries on from where it is let go.
+{
+  const head = shuttles[0];
+  const place = (e: PointerEvent) => {
+    const box = cards.getBoundingClientRect(), x = e.clientX - box.left, y = e.clientY - box.top;
+    let best = 0, bestD = Infinity;
+    items.forEach((_, i) => {
+      const g = clothAt(i);
+      const d = Math.abs(y - g.y) * 1000 + (x < g.left ? g.left - x : x > g.right ? x - g.right : 0); // the nearest line first, then the fabric
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    const g = clothAt(best);
+    playStart = { id: items[best].id, index: Math.max(0, Math.min(g.n - 1, Math.round((x - g.left - g.pad) / g.cw))) };
+  };
+  head.addEventListener('pointerdown', (e) => { head.setPointerCapture(e.pointerId); shuttleDrag = true; place(e); e.stopPropagation(); });
+  head.addEventListener('pointermove', (e) => { if (shuttleDrag) place(e); });
+  const end = () => {
+    if (!shuttleDrag) return;
+    shuttleDrag = false;
+    if (scheduler.playing) { togglePlay(); togglePlay(); } // carry on from the new place
+  };
+  head.addEventListener('pointerup', end);
+  head.addEventListener('pointercancel', end);
+  head.addEventListener('click', (e) => e.stopPropagation());
 }
 
 function pickCard(i: number) {
-  tableSel = Math.max(0, Math.min(items.length - 1, i));
+  tableSel = Math.max(-1, Math.min(items.length - 1, i));
   renderTable();
-  cardEls()[tableSel]?.scrollIntoView({ block: 'nearest' });
+  if (tableSel >= 0) cardEls()[tableSel]?.scrollIntoView({ block: 'nearest' });
+  updateLevel();
 }
+// A press on the bare table lets go of the picked fabric.
+table.addEventListener('click', (e) => { if (!(e.target as HTMLElement).closest('.card, .shuttle') && tableSel >= 0) pickCard(-1); });
 
 /** How wide a second of music is on the table: a thread at the table's tempo is about 22 px,
  * less if the longest fabric would not fit on one line. */
@@ -882,12 +975,6 @@ function renderTable() {
       };
       lane.append(own);
     }
-    if (i === tableSel) {
-      const acts = document.createElement('div');
-      acts.className = 'card-actions';
-      acts.append(button('Duplicate', () => duplicateFabric(i)), button('Delete', () => void deleteFabric(i), { danger: true, disabled: items.length < 2 }));
-      lane.append(acts);
-    }
     const pic = document.createElement('canvas');
     pic.className = 'card-pic';
     pic.style.width = `${w}px`;
@@ -922,7 +1009,7 @@ function renderTable() {
 function drawThread() {
   const els = cardEls().filter((c) => !c.classList.contains('add'));
   if (!els.length) return;
-  const ys = [...new Set(els.map((c) => c.offsetTop + 10))];
+  const ys = [...new Set(els.map((c) => c.offsetTop + c.querySelector<HTMLElement>('.card-pic')!.offsetTop))]; // along the top edge of the cloth
   const box = cards.getBoundingClientRect(), knob = $('knob').getBoundingClientRect();
   const x = 14, right = cards.clientWidth - 14, top = -table.scrollTop - (box.top - table.getBoundingClientRect().top) - 8;
   const kx = Math.max(x + 24, knob.left + knob.width / 2 - box.left), r = 10, last = ys[ys.length - 1];
@@ -1356,10 +1443,11 @@ window.addEventListener('keydown', (e) => {
   if (tableOpen) {
     // Out on the table: pick with the arrows, Enter goes in, ⌘D duplicates, Delete deletes.
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
-    else if (e.key === 'Enter' || e.key === 'Escape') closeTable(tableSel);
-    else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); pickCard(tableSel + (e.key === 'ArrowUp' ? -1 : 1)); }
-    else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateFabric(tableSel); }
-    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); void deleteFabric(tableSel); }
+    else if (e.key === 'Enter') closeTable(tableSel >= 0 ? tableSel : cur);
+    else if (e.key === 'Escape') { if (tableSel >= 0) pickCard(-1); else closeTable(cur); }
+    else if (e.key.startsWith('Arrow')) { e.preventDefault(); pickCard(Math.max(0, tableSel + (e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 1))); }
+    else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); if (tableSel >= 0) duplicateFabric(tableSel); }
+    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); if (tableSel >= 0) void deleteFabric(tableSel); }
     return;
   }
   if (e.code === 'Space') { e.preventDefault(); togglePlay(); }

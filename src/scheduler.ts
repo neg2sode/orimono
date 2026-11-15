@@ -36,6 +36,8 @@ export class Scheduler {
   private lastId: number | null = null;
   private endAt: number | null = null;
   private rows: readonly RowTag[] = ROWS;
+  /** The audio time of the first note after start(). */
+  startTime = 0;
   /** Called when a play-once stretch has finished. */
   onEnd: (() => void) | null = null;
   /** Called each time the pattern comes round to its start, with the audio time of that start. */
@@ -48,18 +50,18 @@ export class Scheduler {
 
   constructor(private engine: Engine, private pattern: () => Pattern) {}
 
-  /** Loop the whole pattern, or with `once` play threads from..to (indices, and only `rows`) a single time. */
-  start(once?: { from: number; to: number; rows?: readonly RowTag[] }) {
+  /** Loop the whole pattern (from thread `at`), or with `once` play threads from..to (indices, and only `rows`) a single time. */
+  start(once?: { from: number; to: number; rows?: readonly RowTag[] }, at = 0) {
     if (this.playing) return;
     this.engine.resume();
     const p = this.pattern();
     this.playing = true;
-    this.idx = once ? Math.min(once.from, p.threads.length - 1) : 0;
+    this.idx = Math.min(once ? once.from : at, p.threads.length - 1);
     this.id = p.threads[this.idx].id;
     this.lastId = once ? p.threads[Math.min(once.to, p.threads.length - 1)].id : null;
     this.endAt = null;
     this.rows = once?.rows ?? ROWS;
-    this.threadTime = this.engine.ctx.currentTime + 0.06;
+    this.threadTime = this.startTime = this.engine.ctx.currentTime + 0.06;
     this.booked = 0;
     this.tick();
     this.timer = window.setInterval(() => this.tick(), WAKE_MS);

@@ -20,18 +20,22 @@
         <div class="bpm"><span id="bpm">72</span><small>BPM</small></div>
         <input id="bpm-input" type="number" min="10" max="300" step="0.1" hidden />
       </div>
-      <div class="seg" role="group" aria-label="Tool">
+      <div class="seg thread-tool" role="group" aria-label="Tool">
         <button id="tool-draw" class="on" title="Draw (D): tap, swipe, long-press to pluck">Draw</button>
         <button id="tool-select" title="Select (S, or hold Shift): rectangle in the grid, groups in the band">Select</button>
       </div>
-      <div class="random-wrap">
+      <div class="random-wrap thread-tool">
         <button id="random" class="primary" title="Random: fill your groups (or the selection) with a beat. Your own notes stay. Shift-click: same style again">Random</button>
         <span id="style-tag" aria-live="polite"></span>
       </div>
-      <button id="clear" title="Clear notes in the selection, or all notes if nothing is selected. Groups stay. (Undoable)">Clear</button>
-      <div class="seg">
+      <button id="clear" class="thread-tool" title="Clear notes in the selection, or all notes if nothing is selected. Groups stay. (Undoable)">Clear</button>
+      <div class="seg thread-tool">
         <button id="undo" title="Undo (⌘Z)">Undo</button>
         <button id="redo" title="Redo (⇧⌘Z)">Redo</button>
+      </div>
+      <div id="fabric-tools" class="seg" role="group" aria-label="Picked fabric">
+        <button id="fab-dup" title="A copy right after it (⌘D)">Duplicate</button>
+        <button id="fab-del" class="danger" title="Delete the picked fabric (Delete)">Delete</button>
       </div>
       <div class="panel-end">
         <div class="zoom-wrap">
