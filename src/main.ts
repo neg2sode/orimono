@@ -1056,8 +1056,8 @@ function renderTable() {
       };
       step();
     };
-    let px = 0, pulled = 0, moved = false;
-    tie.addEventListener('pointerdown', (e) => { tie.setPointerCapture(e.pointerId); px = e.clientX; pulled = 0; moved = false; cancelAnimationFrame(spring); e.stopPropagation(); });
+    let px = 0, pulled = 0, moved = false, touch = false, armed = 0;
+    tie.addEventListener('pointerdown', (e) => { tie.setPointerCapture(e.pointerId); touch = e.pointerType === 'touch'; px = e.clientX; pulled = 0; moved = false; cancelAnimationFrame(spring); e.stopPropagation(); });
     tie.addEventListener('pointermove', (e) => {
       if (!tie.hasPointerCapture(e.pointerId) || it.bpm !== null) return;
       if (Math.abs(e.clientX - px) > 3) moved = true;
@@ -1067,6 +1067,14 @@ function renderTable() {
     tie.addEventListener('pointerup', () => {
       if (moved) return letGo(pulled);
       if (!picked) { if (it.bpm === null) letGo(7); return; }
+      if (touch && !tie.classList.contains('armed')) {
+        // Touch has no hover: the first tap shows the mark, a second tap does it.
+        tie.classList.add('armed');
+        window.clearTimeout(armed);
+        armed = window.setTimeout(() => tie.classList.remove('armed'), 3000);
+        return;
+      }
+      tie.classList.remove('armed');
       // Cutting keeps the tempo it had, so nothing moves: only the bow comes undone (or is tied).
       pull(0);
       it.bpm = it.bpm === null ? projectBpm : null;

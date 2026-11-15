@@ -43,11 +43,15 @@ The button at the top right shows where you are and where a press takes you.
   Play to hear just that region once, and use the tempo knob to listen slower. Press outside, or Esc, to come back.
   Out among the threads a region shows as a soft patch: press it to go in.
 - **Fabrics:** one whole screen of threads is a fabric. Press the right half of the button to zoom out to the table,
-  where fabrics lie side by side in playing order. Click a fabric to go in; click its number to pick it (Duplicate,
-  Delete) or drag the number to move it; the dashed "+" adds a blank one. Play runs a shuttle through all of them,
-  round and round, from wherever the shuttle rests (drag it to choose).
-  The thread along the top is the table's tempo: cut (✂) a fabric's tie to give it a tempo of its own, join (⋈) to
-  follow the table again. Among the threads, the left half of the button slides on to the next fabric.
+  where fabrics lie side by side in playing order, each as wide as it is long in time. Click a fabric to go in; click
+  its number to pick it (Duplicate, Delete) or drag the number to move it; the dashed "+" adds a new one-cell fabric.
+  Play runs a shuttle through all of them, round and round, from wherever the shuttle rests (drag it to choose).
+  Among the threads, the left half of the button slides on to the next fabric.
+- **Tempo on the table:** the thread along the top carries the table's tempo to every fabric through a tie with a
+  bow. Pick a fabric's number, then press its bow to cut it: that fabric keeps a tempo of its own, set inside it
+  with the tempo knob. Press again to tie it back. (Unpicked, the bow is just there to be plucked.)
+- **The drawer:** drag a fabric by its number up to the top to put it away in the drawer; drag a stored fabric back
+  down for a copy. Scroll up over the toolbar, or press the drawer's handle, to pull it out.
 
 ## Code map
 

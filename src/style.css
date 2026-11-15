@@ -209,11 +209,12 @@ body.at-table #drawer { display: flex; }
 .tie { position: absolute; width: 26px; height: 20px; border: none; border-radius: 50%; padding: 0; background: none; z-index: 1; cursor: grab; touch-action: none; }
 .card.sel .tie { cursor: pointer; }
 .card.sel .tie:hover { background: #ffffff14; }
-/* The cut (or tie) mark shows once the number is picked: beside the bow, or above the number
-   when the fabric is too short to have room beside it. */
+/* The cut (or tie) mark shows when the number is picked and the pointer is over the bow (on
+   touch: after a first tap). It sits beside the bow, or above the number when the fabric is
+   too short to have room beside it. */
 .tie::after { content: attr(data-mark); position: absolute; left: calc(100% + 2px); top: 2px; font-size: 13px; color: var(--text); opacity: 0; transition: opacity 0.15s; pointer-events: none; }
-.card.sel .tie::after { opacity: 0.7; }
-.card.sel .tie:hover::after { opacity: 1; }
+.card.sel .tie:hover::after, .card.sel .tie.armed::after { opacity: 1; }
+.card.sel .tie.armed { background: #ffffff14; }
 .card.narrow .tie::after { left: 50%; top: var(--above); transform: translateX(-50%); }
 @media (prefers-reduced-motion: reduce) { .tie-art .tie-up, .tie-art .tie-down, .tie-art .bow { transition: none !important; } }
 .card-pic { display: block; outline: 1px solid #ffffff24; outline-offset: -1px; cursor: zoom-in; }
