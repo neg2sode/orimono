@@ -62,6 +62,10 @@ let items: Item[] = [];
 let cur = 0; // the open fabric
 let projectBpm = fresh().bpm;
 let seen = false; // has the table of fabrics been visited yet?
+// The welcome: shown once, with Play in the middle of it. Pressing Play starts the music and the
+// button flies to its place in the toolbar, so a first beat is drawn while it is already playing.
+const WELCOME_KEY = 'orimono.welcomed';
+let welcoming = !localStorage.getItem(WELCOME_KEY);
 try {
   const raw = JSON.parse(localStorage.getItem(PROJECT_KEY) ?? 'null');
   if (raw && Array.isArray(raw.fabrics)) {
@@ -138,6 +142,7 @@ engine
   .then(() => {
     $('loading').remove();
     $<HTMLButtonElement>('play').disabled = false;
+    $<HTMLButtonElement>('welcome-play').disabled = false;
   })
   .catch((err) => {
     console.error(err);
@@ -227,6 +232,7 @@ scheduler.onEnd = () => { playEnded = performance.now(); showPlaying(); };
 
 function togglePlay() {
   if (!engine.loaded) return;
+  const fromWelcome = welcoming;
   if (scheduler.playing) {
     scheduler.stop();
     view.playheadId = null;
@@ -248,6 +254,40 @@ function togglePlay() {
   showPlaying();
   markPlaying();
   window.setTimeout(checkSound, 500);
+  if (fromWelcome) closeWelcome(true);
+}
+
+/** Put the welcome away. After Play, its button flies to the toolbar's Play button (now "Stop"). */
+function closeWelcome(fly: boolean) {
+  if (!welcoming) return;
+  welcoming = false;
+  localStorage.setItem(WELCOME_KEY, '1');
+  const el = $('welcome'), big = $('welcome-play'), real = $('play');
+  const done = () => { el.hidden = true; document.body.classList.remove('welcoming'); };
+  document.body.classList.remove('intro'); // its animations would hold the card in view
+  if (!fly || still()) return done();
+  const a = big.getBoundingClientRect(), b = real.getBoundingClientRect();
+  const flying = real.cloneNode(true) as HTMLElement;
+  flying.removeAttribute('id');
+  flying.style.cssText = `position:fixed;left:${b.left}px;top:${b.top}px;width:${b.width}px;height:${b.height}px;margin:0;z-index:70;pointer-events:none`;
+  document.body.append(flying);
+  big.style.visibility = 'hidden';
+  el.classList.add('leaving');
+  const from = `translate(${a.left + a.width / 2 - b.left - b.width / 2}px, ${a.top + a.height / 2 - b.top - b.height / 2}px) scale(${a.height / b.height})`;
+  void flying.animate([{ transform: from }, { transform: 'none' }], { duration: 650, easing: 'cubic-bezier(.65,0,.35,1)' }).finished.then(() => { flying.remove(); done(); });
+}
+if (welcoming) {
+  // First launch: the machine comes out part by part (toolbar, row tags, groups and numbers,
+  // strings), and the welcome comes up last, like a title.
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.body.classList.add('intro');
+    renderer.bloom();
+    window.setTimeout(() => document.body.classList.remove('intro'), 6600);
+  }
+  document.body.classList.add('welcoming');
+  $('welcome').hidden = false;
+  $('welcome-play').onclick = togglePlay;
+  $('welcome').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeWelcome(false); }); // a press outside the card: straight to the machine
 }
 
 // If Play is on but the browser has not let the sound start (or the sounds never loaded), say
@@ -538,10 +578,23 @@ $('sounds').onclick = () => $<HTMLDialogElement>('credits').showModal();
     e.stopPropagation();
     const open = pop.hidden;
     close();
-    if (open) { pop.hidden = false; $('length').classList.add('on'); }
+    if (open) {
+      pop.hidden = false;
+      $('length').classList.add('on');
+      $('new-what').textContent = items.length === 1 ? 'This will reset everything: the work here, the tempo and the row levels.' : 'This will reset the work here.';
+    }
   };
   $('new').onclick = () => {
     applyStructure(fresh());
+    if (items.length === 1) {
+      // The only fabric: a clean start all round, tempo and row levels too.
+      projectBpm = fresh().bpm;
+      items[0].bpm = null;
+      mix = {};
+      engine.setMix(mix);
+      save();
+      updateLevel();
+    }
     close();
   };
   document.addEventListener('pointerdown', (e) => {
@@ -1134,7 +1187,7 @@ function dropPlace(clientX: number, clientY: number, skip?: HTMLElement) {
   return { to, mark: mark && pic ? { left: mark.offsetLeft + (at ? 0 : mark.offsetWidth), top: mark.offsetTop + pic.offsetTop, height: pic.offsetHeight } : null };
 }
 // The shelf is a drawer above the toolbar: out of sight until a fabric is picked up, when it
-// slides down to take it. Once something is in it, its lip shows at the top edge.
+// pulled out on purpose. Once something is in it, its lip shows at the top edge.
 const drawer = $('drawer');
 let drawerTimer = 0;
 function openDrawer(on: boolean, after = 0) {
@@ -1144,15 +1197,39 @@ function openDrawer(on: boolean, after = 0) {
 const overShelf = (clientY: number) => drawer.classList.contains('open') && clientY < drawer.getBoundingClientRect().bottom;
 // The drawer and the toolbar are one piece of furniture: scroll up over either to pull the
 // drawer out above the toolbar (both stay in view), scroll down to push it back, or press its
-// handle. It also comes out by itself when a fabric is picked up.
-let heldOpen = false; // opened on purpose: it stays until it is shut on purpose
-const setDrawer = (on: boolean) => { heldOpen = on; openDrawer(on); };
+// handle. It never moves by itself: picking a fabric up leaves it as it is, in or out.
+const setDrawer = (on: boolean) => openDrawer(on);
 for (const el of [drawer, $('panel')]) {
   el.addEventListener('wheel', (e) => {
     if (!tableOpen || Math.abs(e.deltaY) < 4 || (e.target as HTMLElement).closest('#knob, #shelf')) return;
     e.preventDefault();
     setDrawer(e.deltaY < 0);
   }, { passive: false });
+}
+// On a touchscreen: swipe down over the toolbar (or the drawer's edge) to pull the drawer out,
+// swipe up to push it back.
+{
+  let swipe: { id: number; y: number } | null = null, swiped = 0;
+  for (const el of [drawer, $('panel')]) {
+    el.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch' || !tableOpen || (e.target as HTMLElement).closest('#knob, #shelf')) return;
+      swipe = { id: e.pointerId, y: e.clientY };
+    });
+  }
+  window.addEventListener('pointermove', (e) => {
+    if (!swipe || e.pointerId !== swipe.id || Math.abs(e.clientY - swipe.y) < 24) return;
+    setDrawer(e.clientY > swipe.y);
+    swipe = null;
+    swiped = performance.now();
+  });
+  const end = (e: PointerEvent) => { if (swipe?.id === e.pointerId) swipe = null; if (swiped) swiped = performance.now(); };
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
+  // A swipe that began on a button is not a press of that button.
+  document.addEventListener('click', (e) => {
+    if (swiped && performance.now() - swiped < 350) { e.stopPropagation(); e.preventDefault(); }
+    swiped = 0;
+  }, true);
 }
 drawer.querySelector<HTMLElement>('.drawer-lip')!.onclick = () => setDrawer(!drawer.classList.contains('open'));
 
@@ -1323,7 +1400,6 @@ function dragCard(handle: HTMLElement, card: HTMLElement, i: number) {
     }
     ghost.style.transform = `translate(${home!.left + e.clientX - x0}px, ${e.clientY - 22}px)`; // held near its top edge, so it goes where the pointer goes
     // Over the shelf it would be put away; anywhere else it lands among the other fabrics.
-    openDrawer(items.length > 1); // picked up: the drawer slides out to offer itself
     const away = overShelf(e.clientY) && items.length > 1;
     drawer.classList.toggle('over', away);
     if (away) { to = -1; line.remove(); return; }
@@ -1342,7 +1418,6 @@ function dragCard(handle: HTMLElement, card: HTMLElement, i: number) {
     ghost = null;
     card.classList.remove('dragging');
     drawer.classList.remove('over');
-    if (moved && !heldOpen) openDrawer(false, 500);
     if (!moved) { shelfSel = -1; return pickCard(i); }
     if (to < 0) return storeFabric(i);
     const open = items[cur].id;
@@ -1363,6 +1438,7 @@ function addFabric() {
   items.push(makeItem(single()));
   save();
   pickCard(items.length - 1);
+  closeTable(items.length - 1); // straight into it: one cell is a small thing to have to tap
 }
 
 /** A copy right after the original: this is how a fabric is repeated, or varied. */
@@ -1430,11 +1506,17 @@ function closeTable(i: number) {
   if (!tableOpen || tableBusy) return;
   tableBusy = true;
   switchTo(i);
+  // The drawer belongs to the table: it goes the moment the way in begins, not on arrival.
+  // (The table is nudged so the fabrics stay where they were as the room above them opens.)
+  const lift = drawer.offsetHeight;
+  drawer.style.display = 'none';
+  table.scrollTop = Math.max(0, table.scrollTop - lift);
   const pic = cardEls()[cur].querySelector<HTMLElement>('.card-pic')!;
   tick(); // draw the fabric (and lay it out) before it shows
   const from = ontoCloth(pic);
   canvas.style.visibility = '';
   const done = () => {
+    drawer.style.display = '';
     table.hidden = true;
     tableOpen = tableBusy = false;
     canvas.style.zIndex = '';
@@ -1739,6 +1821,7 @@ window.addEventListener('keydown', (e) => {
   if (el.tagName === 'INPUT' && el.type !== 'range') return; // typing; a fader still lets Space play
   if (el.type === 'range' && e.code !== 'Space') return;
   if ($<HTMLDialogElement>('credits').open || $<HTMLDialogElement>('ask').open) return;
+  if (welcoming && e.key === 'Escape') return closeWelcome(false);
   const mod = e.metaKey || e.ctrlKey;
   if (tableOpen) {
     // Out on the table: pick with the arrows, Enter goes in, ⌘D duplicates, Delete deletes.
@@ -1858,6 +1941,8 @@ requestAnimationFrame(frame);
 if (import.meta.env.DEV) Object.assign(window, { __rg: { engine, scheduler, get history() { return history; }, get items() { return items; } } });
 // For tracking down sound trouble: type orimonoSound() in the browser console.
 Object.assign(window, {
+  // To see the first launch again (the bloom and the welcome): type orimonoWelcome() in the console.
+  orimonoWelcome: () => { localStorage.removeItem(WELCOME_KEY); location.reload(); },
   orimonoSound: () => ({
     audio: engine.ctx.state, clock: engine.ctx.currentTime, sampleRate: engine.ctx.sampleRate, soundsLoaded: engine.loaded,
     playing: scheduler.playing, tempo: scheduler.bpm?.(), fabrics: items.length,

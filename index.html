@@ -65,7 +65,7 @@
             <span id="len">16 threads</span><span id="secs">3.33 s</span>
           </button>
           <div id="new-pop" hidden>
-            <p>Start from scratch?<br /><small>This will reset the work here.</small></p>
+            <p>Start from scratch?<br /><small id="new-what">This will reset the work here.</small></p>
             <button id="new" class="danger">Start from scratch</button>
           </div>
         </div>
@@ -96,6 +96,29 @@
       <p id="ask-text"></p>
       <form method="dialog"><button value="no">No</button><button id="ask-yes" value="yes" class="danger">Yes</button></form>
     </dialog>
+    <div id="welcome" hidden>
+      <div class="welcome-card">
+        <h1>Orimono</h1>
+        <p>A drum machine made of threads.<br />Press Play, then draw beats on threads.</p>
+        <button id="welcome-play" class="primary" disabled>Play</button>
+        <!-- Hints: a symbol and a few words each. -->
+        <ul>
+          <li>
+            <svg viewBox="-10.5 0 49 28" aria-hidden="true">
+              <path d="M8 20 V13 a6 6 0 0 1 12 0 V20 M6 20 H22 M12.5 23 a1.5 1.5 0 0 0 3 0 M5 4 L23 25" />
+            </svg>
+            <span>Check your volume and silent mode if there's no sound!</span>
+          </li>
+          <li>
+            <!-- The same weave as the right half of the zoom button. -->
+            <svg viewBox="0 0 36 28" preserveAspectRatio="none" aria-hidden="true">
+              <path d="M0 14 H34 M8 7 H34 M8 21 H34 M13 3 V25 M21 3 V25 M29 3 V25" />
+            </svg>
+            <span>Find this up top, and stitch your beats into something bigger.</span>
+          </li>
+        </ul>
+      </div>
+    </div>
     <div id="loading">Loading sounds…</div>
     <script type="module" src="/src/main.ts"></script>
   </body>

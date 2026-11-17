@@ -48,6 +48,43 @@ export class Renderer {
     this.ctx = canvas.getContext('2d')!;
   }
 
+  // First launch: each part of the machine comes out in its own way, one after another. The
+  // row tags pop down the left edge; the groups and numbers count in along the bottom; then the
+  // strings rise out of their numbers, left to right, each swinging once as it arrives.
+  private bloomAt: number | null = null; // when it began (-1: at the next frame)
+  private bloomT = 0; // ms since then
+  private bloomed = new Set<number>();
+  bloom() { this.bloomAt = -1; this.bloomed.clear(); }
+
+  /** How big row tag ri is drawn while the tags pop in (0: not yet; a little over 1 on the way). */
+  private tagPop(ri: number) {
+    const g = Math.max(0, Math.min(1, (this.bloomT - 500 - ri * 45) / 320));
+    return g <= 0 ? 0 : 1 + 3.4 * Math.pow(g - 1, 3) + 2.4 * Math.pow(g - 1, 2);
+  }
+
+  /** Clip the picture to what has come out so far. Returns true once everything is out. */
+  private bloomClip(p: Pattern, L: Layout, xs: number[]) {
+    const { ctx } = this;
+    const STRIP = 1300, STRIP_MS = 900; // the numbers count in
+    const GRID = 2000, SPREAD = 900, GROW = 600; // first string to last; one string's rise
+    const t = this.bloomT, n = xs.length;
+    const edge = (i: number) => Math.round(i <= 0 ? LABEL_W - 8 : i < n ? xs[i] - L.pad : L.width);
+    const stripY = L.numTop - 2;
+    ctx.beginPath();
+    ctx.rect(0, 0, edge(0), stripY); // the row tags bring themselves in (tagPop)
+    // Groups and numbers: one more number at each step, as if counted.
+    const counted = Math.floor(Math.max(0, Math.min(1, (t - STRIP) / STRIP_MS)) * n);
+    if (t >= STRIP) ctx.rect(0, stripY, counted >= n ? L.width : edge(counted + 1), L.height - stripY);
+    // Strings: each rises from its number to the top.
+    p.threads.forEach((th, i) => {
+      const g = Math.max(0, Math.min(1, (t - GRID - (i / Math.max(1, n - 1)) * SPREAD) / GROW)), e = 1 - Math.pow(1 - g, 3);
+      if (e > 0) ctx.rect(edge(i), stripY - stripY * e, edge(i + 1) - edge(i), stripY * e);
+      if (g > 0.7 && !this.bloomed.has(th.id)) { this.bloomed.add(th.id); this.pluck(th.id, 2.8, 0.22, 5); }
+    });
+    ctx.clip();
+    return t > GRID + SPREAD + GROW;
+  }
+
   /** Forget every string's place and swing: a different fabric is about to be drawn. */
   reset() {
     this.xNow.clear();
@@ -117,6 +154,14 @@ export class Renderer {
 
     ctx.fillStyle = UI.bg;
     ctx.fillRect(0, 0, L.width, L.height);
+    const blooming = this.bloomAt !== null && !still;
+    if (!blooming) this.bloomAt = null;
+    else {
+      if (this.bloomAt! < 0) this.bloomAt = nowMs;
+      this.bloomT = nowMs - this.bloomAt!;
+      ctx.save();
+      if (this.bloomClip(p, L, xs)) this.bloomAt = null;
+    }
 
     const colourOf = (ti: number) => PALETTE[p.groups[p.threads[ti].group].colour].hex;
 
@@ -358,6 +403,12 @@ export class Renderer {
       const hot = ((s.hover.kind === 'cell' || s.hover.kind === 'label') && s.hover.ri === ri)
         || (!!s.rowSel && ri >= s.rowSel[0] && ri <= s.rowSel[1]);
       const away = reg && (ri < reg.r0 || ri > reg.r1) ? 1 - 0.7 * u : 1;
+      const pop = blooming ? this.tagPop(ri) : 1;
+      if (pop <= 0) return;
+      ctx.save();
+      ctx.translate(25, y);
+      ctx.scale(pop, pop);
+      ctx.translate(-25, -y);
       roundRect(ctx, 10, y - 8, 30, 16, 3);
       ctx.globalAlpha = (s.quiet?.[ri] ? 0.35 : 1) * away;
       ctx.fillStyle = hot ? UI.text : UI.tag;
@@ -365,6 +416,7 @@ export class Renderer {
       ctx.fillStyle = UI.bg;
       ctx.fillText(tag, 25, y + 0.5);
       ctx.globalAlpha = 1;
+      ctx.restore();
     });
 
     if (u > 0) {
@@ -372,6 +424,7 @@ export class Renderer {
       ctx.fillRect(0, L.numTop - 2, L.width, L.height - L.numTop + 2);
     }
     this.drawStrip(p, L, s, xs);
+    if (blooming) ctx.restore();
   }
 
   private drawStrip(p: Pattern, L: Layout, s: ViewState, xs: number[]) {
