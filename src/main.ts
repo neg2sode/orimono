@@ -12,6 +12,7 @@ import {
   insertBack, isBoundary, merge, single, mergeGroups, moveGroups, notesBetween, parse, pasteClip, recolour, regionAt, runs, setHit, split, splitPlain, zoomOf, zoomPlan, zoomRect,
   type Clip, type Pattern, type Rect,
 } from './model';
+import { packFabric, unpackFabric } from './link';
 import { STYLES, randomFillStyled } from './random';
 import { Renderer, type ViewState } from './render';
 import { Scheduler } from './scheduler';
@@ -88,6 +89,29 @@ try {
   /* ignore a broken save */
 }
 if (!items.length) items = [makeItem(fresh())];
+
+// A link (the part of the address after "#") holds one fabric. It arrives as a new fabric at
+// the end of the table and is the one shown; nothing already here is changed. If all there is
+// here is the untouched opening fabric, the linked one takes its place, tempo and all.
+let arrivalNote = '';
+if (location.hash.length > 1) {
+  const got = unpackFabric(location.hash.slice(1));
+  const blank = (p: Pattern) => p.threads.length === 16 && Object.keys(p.groups).length === 4 && p.threads.every((t) => !Object.keys(t.lanes).length);
+  if (got === 'newer') arrivalNote = 'This link was made by a newer Orimono. Reload the page, then open the link again.';
+  else if (!got) arrivalNote = "This link couldn't be opened: part of it may be missing.";
+  else if (items.length === 1 && blank(items[0].history.current) && !shelf.fabrics.length) {
+    items = [makeItem(got.pattern)];
+    projectBpm = got.bpm;
+    cur = 0;
+  } else if (items.length < MAX_FABRICS) {
+    items.push(makeItem(got.pattern, got.bpm === projectBpm ? null : got.bpm)); // another tempo: it keeps its own
+    cur = items.length - 1;
+  } else arrivalNote = 'The table is full (99 fabrics), so the linked fabric could not be added.';
+  window.history.replaceState(null, '', location.pathname + location.search); // a refresh must not add it again
+  save();
+}
+// A link pasted into the address while Orimono is open only changes the "#" part: load it.
+window.addEventListener('hashchange', () => { if (location.hash.length > 1) { saveNow(); location.reload(); } });
 let history = items[cur].history;
 const pattern = () => history.current;
 
@@ -568,6 +592,36 @@ $('undo').onclick = () => { history.undo(); clearSelection(); updateLevel(); };
 $('redo').onclick = () => { history.redo(); clearSelection(); updateLevel(); };
 $('tool-draw').onclick = () => setTool('draw');
 $('tool-select').onclick = () => setTool('select');
+// A short note at the bottom of the screen that goes away by itself.
+let toastTimer = 0;
+function toast(text: string, ms = 2000) {
+  let el = document.getElementById('toast');
+  if (!el) { el = document.createElement('div'); el.id = 'toast'; document.body.append(el); }
+  el.textContent = text;
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => el!.remove(), ms);
+}
+if (arrivalNote) toast(arrivalNote, 9000);
+
+// Share: the open fabric as a link. Copied on a computer; handed to the share sheet on a phone.
+const SHARED_KEY = 'orimono.shared';
+$('share').onclick = async () => {
+  const url = `${location.origin}${location.pathname}#${packFabric(pattern(), bpmOf(items[cur]))}`;
+  let said = 'Link copied.';
+  try {
+    if (matchMedia('(pointer: coarse)').matches && navigator.share) { await navigator.share({ title: 'Orimono', url }); said = ''; }
+    else await navigator.clipboard.writeText(url);
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') return; // the share sheet was closed
+    window.prompt('Copy this link:', url);
+    said = '';
+  }
+  // The first time, say what a link holds.
+  if (!localStorage.getItem(SHARED_KEY)) {
+    localStorage.setItem(SHARED_KEY, '1');
+    toast(`${said} A link carries this fabric's beat and tempo. Sounds and row levels stay with you.`.trim(), 8000);
+  } else if (said) toast(said);
+};
 $('sounds').onclick = () => $<HTMLDialogElement>('credits').showModal();
 
 // New sits behind the length readout: picking it shows what it does before it does it.
