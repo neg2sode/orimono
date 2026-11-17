@@ -30,6 +30,12 @@ export class Engine {
   private mixState: Partial<Record<RowTag, RowMix>> = {};
 
   constructor() {
+    // An instrument, not a notification: on iPhones that allow it (iOS 17 and later), ask to
+    // sound even when the silent switch is on. Elsewhere this does nothing.
+    try {
+      const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+      if (session) session.type = 'playback';
+    } catch { /* not supported: the silent switch decides */ }
     const limiter = this.ctx.createDynamicsCompressor();
     limiter.threshold.value = -6;
     limiter.knee.value = 6;
