@@ -42,8 +42,20 @@ let shelf: { fabrics: Stored[]; sounds: unknown[] } = { fabrics: [], sounds: [] 
 const MAX_FABRICS = 99;
 
 let saveTimer = 0;
+// Two tabs of Orimono share one saved project. When another tab saves (a link opened there, or
+// work done there), this tab is out of date: it stops saving, so it can't overwrite the newer
+// work, and loads the project again (at once if it is in view, otherwise when it is next looked at).
+let stale = false;
+window.addEventListener('storage', (e) => {
+  if (e.key !== PROJECT_KEY || stale) return;
+  stale = true;
+  window.clearTimeout(saveTimer);
+  if (document.hidden) document.addEventListener('visibilitychange', () => location.reload(), { once: true });
+  else location.reload();
+});
 function saveNow() {
   window.clearTimeout(saveTimer);
+  if (stale) return;
   // A project: the table (fabrics in order), the shelf, and settings (tempo, row levels).
   const fabrics = items.map((it) => ({ ...it.history.current, bpm: it.bpm ?? projectBpm }));
   const own = items.map((it) => it.bpm !== null);
@@ -51,6 +63,7 @@ function saveNow() {
 }
 function save() {
   window.clearTimeout(saveTimer);
+  if (stale) return;
   saveTimer = window.setTimeout(saveNow, 300);
 }
 window.addEventListener('pagehide', () => { if (items.length) saveNow(); }); // nothing is lost by leaving quickly
