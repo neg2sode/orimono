@@ -21,14 +21,17 @@ export const SHELF_ORDER = [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0];
 /** How many new groups a removed colour waits before it can be used again. */
 export const REST_BIRTHS = 3;
 
+// The interface is neutral grey, so the colours of fibres, threads and fabrics are the only
+// colours that stand out. One accent (`play`) marks actions; `warn` marks what removes things.
+// The same values are in style.css.
 export const UI = {
-  bg: '#151A1F',
-  panel: '#2F2923',
-  border: '#69757F',
-  dim: '#9F8F82',
-  secondary: '#B99980',
-  text: '#FFFAD8',
-  tag: '#EDD49D',
+  bg: '#191919',
+  panel: '#242424',
+  border: '#6E6E6E',
+  dim: '#8A8A8A',
+  secondary: '#A0A0A0',
+  text: '#BFBFBF',
+  tag: '#3A3A3A',
   play: '#DBA868',
   warn: '#E1707C',
 };

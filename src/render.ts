@@ -187,7 +187,7 @@ export class Renderer {
     // Row guides.
     ROWS.forEach((_, ri) => {
       const y = rowY(L, ri);
-      ctx.strokeStyle = 'rgba(105,117,127,0.13)';
+      ctx.strokeStyle = 'rgba(128,128,128,0.13)';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(Math.max(LABEL_W - 6, xs[0] - L.pad - 6), Math.round(y) + 0.5);
@@ -362,7 +362,7 @@ export class Renderer {
       const r = s.rect;
       const x0 = xs[r.t0] - L.pad, x1 = xs[r.t1] + L.colW - L.pad;
       const ya = L.top + r.r0 * L.rowH, yb = L.top + (r.r1 + 1) * L.rowH;
-      ctx.fillStyle = 'rgba(255,250,216,0.06)';
+      ctx.fillStyle = 'rgba(191,191,191,0.06)';
       ctx.fillRect(x0, ya, x1 - x0, yb - ya);
       ctx.setLineDash([4, 3]);
       ctx.strokeStyle = UI.text;
@@ -413,7 +413,7 @@ export class Renderer {
       ctx.globalAlpha = (s.quiet?.[ri] ? 0.35 : 1) * away;
       ctx.fillStyle = hot ? UI.text : UI.tag;
       ctx.fill();
-      ctx.fillStyle = UI.bg;
+      ctx.fillStyle = hot ? UI.bg : UI.text;
       ctx.fillText(tag, 25, y + 0.5);
       ctx.globalAlpha = 1;
       ctx.restore();

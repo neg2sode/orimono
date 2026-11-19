@@ -3,7 +3,7 @@ import '@fontsource/space-grotesk/500.css';
 import '@fontsource/space-grotesk/600.css';
 import './style.css';
 
-import { BPM_MAX, BPM_MIN, DEFAULT_VELOCITY, MAX_ZOOM, PALETTE, ROWS, threadSeconds, type RowTag } from './constants';
+import { BPM_MAX, BPM_MIN, DEFAULT_VELOCITY, MAX_ZOOM, PALETTE, ROWS, UI, threadSeconds, type RowTag } from './constants';
 import { Engine, type RowMix } from './audio';
 import { History } from './history';
 import { LABEL_W, cellL, cellR, computeLayout, dropIndex, hitTest, inNumberLane, touchStripTarget, type Layout, type Target } from './layout';
@@ -927,7 +927,7 @@ function drawCloth(cv: HTMLCanvasElement, p: Pattern, w: number, h = CLOTH_H) {
   const ctx = cv.getContext('2d')!;
   ctx.scale(dpr, dpr);
   const n = p.threads.length, cw = w / n, rh = (h - CLOTH_BAND) / ROWS.length, pad = clothPad(cw);
-  ctx.fillStyle = '#1b2026';
+  ctx.fillStyle = '#1f1f1f';
   ctx.fillRect(0, 0, w, h);
   for (const r of runs(p)) {
     const hex = PALETTE[r.colour].hex, x0 = r.start * cw, x1 = r.end * cw;
@@ -1436,7 +1436,7 @@ function pulseThread() {
     if (!bead || !pic || !items[i] || items[i].bpm !== null) return;
     const y = card.offsetTop + pic.offsetTop, tx = card.offsetLeft + clothPad(pic.offsetWidth / items[i].history.current.threads.length);
     const far = reach(y) + (y === ys[0] ? Math.abs(tx - kx) : tx - x);
-    bead.animate([{ background: 'var(--bg)', color: 'var(--text)' }, { background: 'var(--caramel)', color: 'var(--bg)', offset: 0.25 }, { background: 'var(--bg)', color: 'var(--text)' }],
+    bead.animate([{ background: 'var(--bg)', color: 'var(--text)' }, { background: 'var(--accent)', color: 'var(--bg)', offset: 0.25 }, { background: 'var(--bg)', color: 'var(--text)' }],
       { duration: 520, delay: (far / speed) * 1000 });
   });
 }
@@ -2009,6 +2009,8 @@ if (import.meta.env.DEV) Object.assign(window, { __rg: { engine, scheduler, get 
 // For tracking down sound trouble: type orimonoSound() in the browser console.
 Object.assign(window, {
   // To see the first launch again (the bloom and the welcome): type orimonoWelcome() in the console.
+  // For trying accent colours: orimonoAccent('#8bc0bc') changes it until the page is reloaded.
+  orimonoAccent: (hex: string) => { UI.play = hex; document.documentElement.style.setProperty('--accent', hex); if (tableOpen && !tableBusy) renderTable(); },
   orimonoWelcome: () => { localStorage.removeItem(WELCOME_KEY); location.reload(); },
   orimonoSound: () => ({
     audio: engine.ctx.state, clock: engine.ctx.currentTime, sampleRate: engine.ctx.sampleRate, soundsLoaded: engine.loaded,

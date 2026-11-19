@@ -1,13 +1,15 @@
 :root {
   color-scheme: dark; /* already dark: browsers and darkening extensions should leave it be */
-  --bg: #151a1f;
-  --panel: #2f2923;
-  --border: #69757f;
-  --dim: #9f8f82;
-  --secondary: #b99980;
-  --text: #fffad8;
-  --honey: #edd49d;
-  --caramel: #dba868;
+  /* Neutral greys, so the colours of fibres, threads and fabrics are what stands out. One
+     accent for actions, one warning colour. The same values are in constants.ts. */
+  --bg: #191919;
+  --panel: #242424;
+  --border: #6e6e6e;
+  --dim: #8a8a8a;
+  --secondary: #a0a0a0;
+  --text: #bfbfbf;
+  --tag: #3a3a3a;
+  --accent: #dba868;
   --warn: #e1707c;
   font-family: 'Space Grotesk', system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
@@ -31,7 +33,7 @@ button {
 }
 button:hover:not(:disabled) { border-color: var(--secondary); }
 button:disabled { opacity: 0.4; cursor: default; }
-button.primary { background: var(--caramel); color: var(--bg); border-color: var(--caramel); font-weight: 600; }
+button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
 button.primary.playing { background: var(--text); border-color: var(--text); }
 button.ghost { border-color: transparent; color: var(--dim); }
 .seg { display: flex; }
@@ -44,17 +46,17 @@ button.ghost { border-color: transparent; color: var(--dim); }
 .knob { width: 44px; height: 44px; cursor: ns-resize; touch-action: none; outline: none; border-radius: 50%; }
 .knob:focus-visible { box-shadow: 0 0 0 2px var(--secondary); }
 .knob svg { width: 100%; height: 100%; }
-.knob-body { fill: #1f1b17; stroke: var(--border); stroke-width: 1.5; }
-.knob-arc { fill: none; stroke: var(--caramel); stroke-width: 3; stroke-linecap: round; }
+.knob-body { fill: #1f1f1f; stroke: var(--border); stroke-width: 1.5; }
+.knob-arc { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; }
 .knob-tick { stroke: var(--text); stroke-width: 2.5; stroke-linecap: round; }
 .bpm { display: flex; align-items: baseline; gap: 4px; min-width: 94px; } /* room for three digits and "playback", so the toolbar holds still */
 .bpm span { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .bpm small { color: var(--secondary); font-size: 11px; }
-.tempo.local .bpm span { color: var(--caramel); }
+.tempo.local .bpm span { color: var(--accent); }
 /* "playback" hangs above "BPM" without moving anything: the number keeps its place. */
 .bpm small { position: relative; min-width: 44px; }
 .tempo.local .bpm small::before { content: 'playback'; position: absolute; left: 0; bottom: 100%; line-height: 1; }
-.tempo.local .knob-body { stroke: var(--caramel); }
+.tempo.local .knob-body { stroke: var(--accent); }
 /* A fabric cut from the table's tempo thread: the knob is its own tempo. */
 .tempo.own .bpm small::before { content: 'own'; position: absolute; left: 0; bottom: 100%; line-height: 1; }
 .tempo.own .knob-arc { stroke: var(--text); }
@@ -105,7 +107,7 @@ button:focus:not(:focus-visible) { outline: none; }
 #credits::backdrop { background: #0008; }
 #credits h2 { margin: 0 0 8px; font-size: 17px; font-weight: 600; }
 #credits ul { padding-left: 18px; }
-#credits a { color: var(--honey); }
+#credits a { color: var(--accent); }
 #credits form { text-align: right; margin-top: 12px; }
 
 /* Touch screens: bigger, roomier action buttons. */
@@ -118,10 +120,10 @@ button:focus:not(:focus-visible) { outline: none; }
 #actions.mix { flex-direction: column; align-items: stretch; gap: 4px; padding: 8px 10px; }
 .mix-line { display: flex; align-items: center; gap: 8px; }
 .mix-tag {
-  width: 30px; text-align: center; font-size: 10px; font-weight: 600; color: var(--bg);
-  background: var(--honey); border-radius: 3px; padding: 1px 0;
+  width: 30px; text-align: center; font-size: 10px; font-weight: 600; color: var(--text);
+  background: var(--tag); border-radius: 3px; padding: 1px 0;
 }
-.mix-line input[type=range] { width: 300px; accent-color: var(--caramel); }
+.mix-line input[type=range] { width: 300px; accent-color: var(--accent); }
 .mix-db { width: 58px; font-size: 12px; color: var(--secondary); text-align: right; }
 #actions .mix-toggle { padding: 2px 7px; font-size: 11px; }
 #actions .mix-toggle.on { background: var(--text); color: var(--bg); border-color: var(--text); }
@@ -182,7 +184,7 @@ body.at-table #drawer { display: flex; }
   border-top: 1px solid #8a6540; border-bottom: 1px solid #1a110a; }
 .drawer-lip i { width: 64px; height: 6px; border-radius: 3px; background: linear-gradient(#e6c887, #9a7636); box-shadow: 0 1px 2px #000a, inset 0 1px 0 #fff5; }
 .drawer-lip:hover i { background: linear-gradient(#f3dca4, #b08a44); }
-#drawer.over #shelf { box-shadow: inset 0 12px 16px -8px #000d, inset 0 0 0 2px var(--caramel); }
+#drawer.over #shelf { box-shadow: inset 0 12px 16px -8px #000d, inset 0 0 0 2px var(--accent); }
 #drawer.over .drawer-lip i { background: linear-gradient(#fff3cf, #dba868); }
 .stored { flex: none; display: block; cursor: grab; touch-action: none; outline: 1px solid #ffffff24; outline-offset: -1px; }
 .stored:hover { outline-color: var(--secondary); }
@@ -190,19 +192,19 @@ body.at-table #drawer { display: flex; }
 .stored.ghost { position: fixed; left: 0; top: 0; z-index: 60; pointer-events: none; box-shadow: 0 10px 30px #000c; outline-color: var(--text); }
 .tempo-thread path.pulse { stroke: var(--text); stroke-width: 2.5; opacity: 1; }
 .tempo-thread { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
-.tempo-thread path { fill: none; stroke: var(--caramel); stroke-width: 1.5; stroke-linecap: round; opacity: 0.75; }
+.tempo-thread path { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linecap: round; opacity: 0.75; }
 .card { position: relative; }
 /* Above each fabric: its number bead, with a tie down to the strand that runs along the top
    edge of the cloth (where the shuttle glides). */
 .lane { position: relative; }
 .tempo-thread { z-index: 2; }
-.card-n { position: absolute; top: 0; width: 26px; height: 26px; border-radius: 50%; padding: 0; cursor: grab; touch-action: none; font-weight: 600; font-size: 12px; background: var(--bg); border-color: var(--caramel); z-index: 1; }
+.card-n { position: absolute; top: 0; width: 26px; height: 26px; border-radius: 50%; padding: 0; cursor: grab; touch-action: none; font-weight: 600; font-size: 12px; background: var(--bg); border-color: var(--accent); z-index: 1; }
 .card.sel .card-n { background: var(--text); color: var(--bg); border-color: var(--text); }
 .card.cut .card-n { border-color: var(--dim); }
 /* The tie and its bow. Cut, the bow comes undone and the two ends swing loose. */
 .tie-art { position: absolute; top: 26px; overflow: visible; pointer-events: none; }
-.tie-art path, .tie-art circle { fill: none; stroke: var(--caramel); stroke-width: 1.5; stroke-linecap: round; }
-.tie-art circle { fill: var(--caramel); stroke: none; }
+.tie-art path, .tie-art circle { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linecap: round; }
+.tie-art circle { fill: var(--accent); stroke: none; }
 .tie-art .tie-up, .tie-art .tie-down, .tie-art .bow { transform-box: view-box; transition: transform 0.5s cubic-bezier(0.3, 1.9, 0.5, 1), opacity 0.2s, stroke 0.3s; }
 .card.cut .tie-art .bow { transform: scale(0) rotate(40deg); opacity: 0; transition: transform 0.25s ease-in, opacity 0.25s; }
 .card.cut .tie-art .tie-up { transform: rotate(-14deg) scaleY(0.82); stroke: var(--dim); }
@@ -227,7 +229,7 @@ body.at-table #drawer { display: flex; }
 /* The shuttle rides the strand; over a fabric a fine line drops through the cloth, and while
    it moves its thread trails behind. */
 .shuttle { position: absolute; left: 0; top: 0; width: 0; pointer-events: none; z-index: 3; }
-.shuttle.line { border-left: 1.5px solid var(--caramel); margin-left: -0.75px; }
+.shuttle.line { border-left: 1.5px solid var(--accent); margin-left: -0.75px; }
 .shuttle.trail::before { content: ''; position: absolute; right: 0; top: -1px; width: 150px; height: 2px; background: linear-gradient(to right, transparent, var(--text)); opacity: 0.7; }
 .shuttle i { position: absolute; left: -13px; top: -6px; width: 26px; height: 11px; background: var(--text); clip-path: polygon(0 50%, 22% 0, 78% 0, 100% 50%, 78% 100%, 22% 100%); }
 .shuttle.rest i { pointer-events: auto; cursor: grab; touch-action: none; }
@@ -235,7 +237,7 @@ body.at-table #drawer { display: flex; }
 .drop-line { position: absolute; width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; z-index: 5; }
 
 .zoom .here { color: var(--text); }
-.zoom .go { color: var(--caramel); }
+.zoom .go { color: var(--accent); }
 .zoom .go.breathe { animation: breathe 1.6s ease-in-out infinite; }
 @keyframes breathe { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .zoom .go.breathe { animation: none; } .zoom > * { transition: none; } }
@@ -277,7 +279,7 @@ body.at-table .thread-tool { display: none; }
 
 /* The welcome: shown once, over the machine, with Play in the middle. Pressed, the button flies
    to its place in the toolbar (which waits, out of sight, until it lands). */
-#welcome { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: #151a1fc4; transition: opacity 0.4s; }
+#welcome { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: #191919c4; transition: opacity 0.4s; }
 #welcome[hidden] { display: none; }
 #welcome.leaving { opacity: 0; pointer-events: none; }
 .welcome-card { max-width: 400px; text-align: center; background: var(--panel); border: 1px solid #00000060; border-radius: 14px; padding: 26px 28px 22px; box-shadow: 0 10px 40px #000a; }
