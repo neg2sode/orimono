@@ -37,6 +37,8 @@ Other commands:
 - **Share:** copies a link that holds the open fabric (its beat and tempo; not sounds or row levels). Opening a link
   adds that fabric at the end of the table. Nothing is sent to a server: the beat is in the address itself.
 - The first launch shows a short welcome; `orimonoWelcome()` in the browser console shows it again.
+- The interface is neutral grey so that the threads' colours stand out; `orimonoAccent()` in the console opens a
+  small picker for trying other accent colours.
 
 ### Three levels: fibres, threads, fabrics
 
@@ -65,6 +67,7 @@ The button at the top right shows where you are and where a press takes you.
 | `src/model.ts` | The pattern and every edit (pure functions), dye shelf colour rules |
 | `src/colour.ts` | OKLab colour distance, for nudging colours |
 | `src/history.ts` | Undo/redo, one gesture per step |
+| `src/picker.ts` | The accent picker (console only) |
 | `src/link.ts` | A fabric packed into a link, and back |
 | `src/random.ts` | Random fill into the user's groups |
 | `src/audio.ts` | Sample playback: velocity → strength, random takes, spill-over, choke |
