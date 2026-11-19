@@ -31,6 +31,7 @@ export const UI = {
   dim: '#8A8A8A',
   secondary: '#A0A0A0',
   text: '#BFBFBF',
+  bright: '#E8E8E8', // for what is worth highlighting: where you are, what is picked, what is on
   tag: '#3A3A3A',
   play: '#DBA868',
   warn: '#E1707C',

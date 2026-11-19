@@ -314,7 +314,7 @@ export class Renderer {
             }
             if (hit.mine && glow > 0 && inGlow) {
               ctx.globalAlpha = a * glow;
-              ctx.strokeStyle = UI.text;
+              ctx.strokeStyle = UI.bright;
               ctx.lineWidth = z > 1 ? 1.5 : 2;
               ctx.beginPath();
               ctx.arc(x, y, r + 3 + 4 * (1 - glow), 0, Math.PI * 2);
@@ -336,7 +336,7 @@ export class Renderer {
     // Thread level: the zoomed region under the pointer lights up (a press goes inside).
     if (s.hoverRegion && !reg) {
       const b = regionBox(L, s.hoverRegion);
-      ctx.strokeStyle = UI.text;
+      ctx.strokeStyle = UI.bright;
       ctx.globalAlpha = 0.7;
       ctx.lineWidth = 1.5;
       roundRect(ctx, b.x0 + 0.5, b.y0 + 1.5, b.x1 - b.x0 - 1, b.y1 - b.y0 - 3, 5);
@@ -348,7 +348,7 @@ export class Renderer {
     if (s.hover.kind === 'cell' && !s.hold && !s.hoverRegion) {
       const hz = p.threads[s.hover.ti]?.lanes[ROWS[s.hover.ri]]?.zoom ?? 1;
       const x = fibreX(L, xs[s.hover.ti], s.hover.slot, hz), y = rowY(L, s.hover.ri);
-      ctx.strokeStyle = UI.text;
+      ctx.strokeStyle = UI.bright;
       ctx.globalAlpha = 0.5;
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -365,7 +365,7 @@ export class Renderer {
       ctx.fillStyle = 'rgba(191,191,191,0.06)';
       ctx.fillRect(x0, ya, x1 - x0, yb - ya);
       ctx.setLineDash([4, 3]);
-      ctx.strokeStyle = UI.text;
+      ctx.strokeStyle = UI.bright;
       ctx.lineWidth = 1;
       ctx.strokeRect(x0 + 0.5, ya + 0.5, x1 - x0 - 1, yb - ya - 1);
       ctx.setLineDash([]);
@@ -381,7 +381,7 @@ export class Renderer {
       ctx.fillRect(0, b.y0, b.x0, b.y1 - b.y0);
       ctx.fillRect(b.x1, b.y0, L.width - b.x1, b.y1 - b.y0);
       ctx.globalAlpha = 0.45 * u;
-      ctx.strokeStyle = UI.text;
+      ctx.strokeStyle = UI.bright;
       ctx.lineWidth = 1;
       roundRect(ctx, b.x0 - 0.5, b.y0 - 0.5, b.x1 - b.x0 + 1, b.y1 - b.y0 + 1, 6);
       ctx.stroke();
@@ -411,7 +411,7 @@ export class Renderer {
       ctx.translate(-25, -y);
       roundRect(ctx, 10, y - 8, 30, 16, 3);
       ctx.globalAlpha = (s.quiet?.[ri] ? 0.35 : 1) * away;
-      ctx.fillStyle = hot ? UI.text : UI.tag;
+      ctx.fillStyle = hot ? UI.bright : UI.tag;
       ctx.fill();
       ctx.fillStyle = hot ? UI.bg : UI.text;
       ctx.fillText(tag, 25, y + 0.5);
@@ -454,7 +454,7 @@ export class Renderer {
       for (let ti = reg.t0; ti <= reg.t1; ti++) {
         for (let k = 0; k < fz; k += every) {
           ctx.font = `${k === 0 ? 600 : 400} 11px ${FONT}`;
-          ctx.fillStyle = k === 0 ? UI.text : UI.dim;
+          ctx.fillStyle = k === 0 ? UI.bright : UI.dim;
           ctx.fillText(String((ti - reg.t0) * fz + k + 1), fibreX(L, xs[ti], k, fz), ny);
         }
       }
@@ -479,13 +479,13 @@ export class Renderer {
       if (hovered) {
         // "+" above, "–" below, as two separate buttons.
         const top = h.kind === 'add';
-        ctx.fillStyle = top ? UI.text : UI.warn;
+        ctx.fillStyle = top ? UI.bright : UI.warn;
         ctx.globalAlpha = 0.16;
         roundRect(ctx, x - pillW / 2, top ? L.numTop + 2 : L.numTop + L.numH / 2 + 2, pillW, pillH, 5);
         ctx.fill();
         ctx.globalAlpha = 1;
         ctx.font = `600 14px ${FONT}`;
-        ctx.fillStyle = top ? UI.text : UI.dim;
+        ctx.fillStyle = top ? UI.bright : UI.dim;
         ctx.fillText('+', x, L.numTop + L.numH * 0.25);
         ctx.fillStyle = top ? UI.dim : UI.warn;
         ctx.fillText('–', x, L.numTop + L.numH * 0.75);
@@ -493,14 +493,14 @@ export class Renderer {
       }
       const picked = s.stripSel === ti;
       if (picked) {
-        ctx.fillStyle = UI.text;
+        ctx.fillStyle = UI.bright;
         roundRect(ctx, x - pillW / 2, ny - 11, pillW, 22, 6);
         ctx.fill();
       }
       if ((ti + 1) % L.labelEvery !== 0 && ti !== 0 && !picked) continue;
       const groupStart = L.runs.some((r) => r.start === ti);
       ctx.font = `${groupStart || picked ? 600 : 400} 11px ${FONT}`;
-      ctx.fillStyle = picked ? UI.bg : groupStart ? UI.text : UI.dim;
+      ctx.fillStyle = picked ? UI.bg : groupStart ? UI.bright : UI.dim;
       ctx.fillText(String(ti + 1), x, ny);
     }
     ctx.globalAlpha = 1;
@@ -514,13 +514,13 @@ export class Renderer {
         // group, drawn like the "+" on a number (with no "–" beneath it). If a cell's number
         // is right there, the "+" stands in its place.
         const px = endPill >= 0 ? xs[endPill] : s.endX;
-        ctx.fillStyle = UI.text;
+        ctx.fillStyle = UI.bright;
         ctx.globalAlpha = 0.16;
         roundRect(ctx, px - pillW / 2, ny - pillH / 2, pillW, pillH, 5);
         ctx.fill();
         ctx.globalAlpha = 1;
         ctx.font = `600 14px ${FONT}`;
-        ctx.fillStyle = UI.text;
+        ctx.fillStyle = UI.bright;
         ctx.fillText('+', px, ny + 0.5);
         tooltip(ctx, px + (end === 'front' ? -pillW / 2 : pillW / 2), L.numTop - 4, 'add a cell', end === 'front' ? 'left' : 'right');
         if (Math.abs(x - s.endX) < 24) continue; // it stands where the group "+" was
@@ -542,7 +542,7 @@ export class Renderer {
       // The label sits halfway between the two numbers. A split is a straight cut there; a
       // merge's line steps across to where the two groups meet, just before the next string.
       const x = midX(L, h.g), edge = h.kind === 'split' ? x : gapX(L, h.g);
-      ctx.strokeStyle = h.kind === 'split' ? UI.text : UI.play;
+      ctx.strokeStyle = h.kind === 'split' ? UI.bright : UI.play;
       ctx.lineWidth = 1.5;
       ctx.lineJoin = 'round';
       ctx.beginPath();
@@ -553,7 +553,7 @@ export class Renderer {
       ctx.stroke();
       ctx.fillStyle = UI.panel;
       ctx.fillRect(x - 8, ny - 8, 16, 16);
-      ctx.fillStyle = h.kind === 'split' ? UI.text : UI.play;
+      ctx.fillStyle = h.kind === 'split' ? UI.bright : UI.play;
       ctx.font = `600 13px ${FONT}`;
       ctx.fillText(h.kind === 'split' ? '✂' : '⋈', x, ny);
       tooltip(ctx, x + 10, L.numTop - 4, h.kind === 'split' ? 'split here' : 'merge');
@@ -570,7 +570,7 @@ export class Renderer {
       ctx.fill();
       ctx.globalAlpha = 1;
       if (sel) {
-        ctx.strokeStyle = UI.text;
+        ctx.strokeStyle = UI.bright;
         ctx.lineWidth = 1.5;
         roundRect(ctx, x0 - 2, L.bandTop - 2, x1 - x0 + 4, L.bandH + 4, 4);
         ctx.stroke();
@@ -581,7 +581,7 @@ export class Renderer {
     if (s.drop) {
       const rest = L.runs.filter((_, i) => i < s.drop!.a || i > s.drop!.b);
       const x = s.drop.idx < rest.length ? cellL(L, rest[s.drop.idx].start) : cellR(L, n - 1);
-      ctx.strokeStyle = UI.text;
+      ctx.strokeStyle = UI.bright;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(x, L.top - 6);

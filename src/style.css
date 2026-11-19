@@ -8,6 +8,7 @@
   --dim: #8a8a8a;
   --secondary: #a0a0a0;
   --text: #bfbfbf;
+  --bright: #e8e8e8; /* what is worth highlighting: where you are, what is picked, what is on */
   --tag: #3a3a3a;
   --accent: #dba868;
   --warn: #e1707c;
@@ -25,7 +26,7 @@ body { display: flex; flex-direction: column; user-select: none; -webkit-user-se
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
   padding: 10px 18px; background: var(--panel); border-bottom: 1px solid #00000040;
 }
-.brand { font-weight: 600; font-size: 17px; letter-spacing: 0.02em; margin-right: 6px; border-color: transparent; background: none; padding: 4px 6px; margin-left: -6px; color: var(--text); }
+.brand { font-weight: 600; font-size: 17px; letter-spacing: 0.02em; margin-right: 6px; border-color: transparent; background: none; padding: 4px 6px; margin-left: -6px; color: var(--bright); }
 .brand:hover { border-color: var(--border); }
 button {
   font: inherit; font-size: 13px; font-weight: 500; color: var(--text); background: transparent;
@@ -34,13 +35,13 @@ button {
 button:hover:not(:disabled) { border-color: var(--secondary); }
 button:disabled { opacity: 0.4; cursor: default; }
 button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
-button.primary.playing { background: var(--text); border-color: var(--text); }
+button.primary.playing { background: var(--bright); border-color: var(--bright); }
 button.ghost { border-color: transparent; color: var(--dim); }
 .seg { display: flex; }
 .seg button { border-radius: 0; }
 .seg button:first-child { border-radius: 6px 0 0 6px; }
 .seg button:last-child { border-radius: 0 6px 6px 0; border-left: none; }
-.seg button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.seg button.on { background: var(--bright); color: var(--bg); border-color: var(--bright); }
 
 .tempo { display: flex; align-items: center; gap: 8px; position: relative; }
 .knob { width: 44px; height: 44px; cursor: ns-resize; touch-action: none; outline: none; border-radius: 50%; }
@@ -48,9 +49,9 @@ button.ghost { border-color: transparent; color: var(--dim); }
 .knob svg { width: 100%; height: 100%; }
 .knob-body { fill: #1f1f1f; stroke: var(--border); stroke-width: 1.5; }
 .knob-arc { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; }
-.knob-tick { stroke: var(--text); stroke-width: 2.5; stroke-linecap: round; }
+.knob-tick { stroke: var(--bright); stroke-width: 2.5; stroke-linecap: round; }
 .bpm { display: flex; align-items: baseline; gap: 4px; min-width: 94px; } /* room for three digits and "playback", so the toolbar holds still */
-.bpm span { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bpm span { color: var(--bright); font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .bpm small { color: var(--secondary); font-size: 11px; }
 .tempo.local .bpm span { color: var(--accent); }
 /* "playback" hangs above "BPM" without moving anything: the number keeps its place. */
@@ -59,7 +60,7 @@ button.ghost { border-color: transparent; color: var(--dim); }
 .tempo.local .knob-body { stroke: var(--accent); }
 /* A fabric cut from the table's tempo thread: the knob is its own tempo. */
 .tempo.own .bpm small::before { content: 'own'; position: absolute; left: 0; bottom: 100%; line-height: 1; }
-.tempo.own .knob-arc { stroke: var(--text); }
+.tempo.own .knob-arc { stroke: var(--bright); }
 #bpm-input {
   position: absolute; left: 52px; width: 80px; font: inherit; font-size: 18px; color: var(--text);
   background: var(--bg); border: 1px solid var(--secondary); border-radius: 4px; padding: 2px 6px;
@@ -69,7 +70,7 @@ button.ghost { border-color: transparent; color: var(--dim); }
 .readout { border: 1px solid transparent; padding: 4px 8px; background: transparent; display: flex; flex-direction: column; justify-content: center; font-size: 12px; color: var(--secondary); line-height: 1.3; text-align: right; min-width: 132px; } /* fixed room, so the zoom button beside it never moves */
 .divider { width: 1px; align-self: stretch; margin: 2px 0; background: #ffffff1c; }
 #sounds { padding-left: 6px; padding-right: 6px; }
-.readout span:first-child { color: var(--text); font-size: 14px; }
+.readout span:first-child { color: var(--bright); font-size: 14px; }
 .readout:hover:not(:disabled) { border-color: var(--border); }
 .readout.on { border-color: var(--secondary); }
 #new-pop {
@@ -126,7 +127,7 @@ button:focus:not(:focus-visible) { outline: none; }
 .mix-line input[type=range] { width: 300px; accent-color: var(--accent); }
 .mix-db { width: 58px; font-size: 12px; color: var(--secondary); text-align: right; }
 #actions .mix-toggle { padding: 2px 7px; font-size: 11px; }
-#actions .mix-toggle.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+#actions .mix-toggle.on { background: var(--bright); color: var(--bg); border-color: var(--bright); }
 .mix-foot { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; }
 @media (pointer: coarse) {
   .mix-line input[type=range] { width: min(300px, 50vw); height: 32px; }
@@ -153,7 +154,7 @@ button:focus:not(:focus-visible) { outline: none; }
 .zoom .off { flex-grow: 0; opacity: 0; }
 /* Two halves (nothing selected): a fine line between them, and each half answers the pointer. */
 .zoom.two { background: linear-gradient(#ffffff1c, #ffffff1c) center / 1px 60% no-repeat; }
-.zoom.two > *:hover { color: var(--text); }
+.zoom.two > *:hover { color: var(--bright); }
 /* "Next fabric": the bead runs along the thread towards the grid. */
 .zoom .z-thread.next:hover::after, .zoom .z-thread.armed::after { animation: next-bead 0.9s ease-in-out infinite; }
 @keyframes next-bead { 0% { left: 20%; opacity: 0; } 25% { opacity: 1; } 80% { opacity: 1; } 100% { left: 108%; opacity: 0; } }
@@ -188,9 +189,9 @@ body.at-table #drawer { display: flex; }
 #drawer.over .drawer-lip i { background: linear-gradient(#fff3cf, #dba868); }
 .stored { flex: none; display: block; cursor: grab; touch-action: none; outline: 1px solid #ffffff24; outline-offset: -1px; }
 .stored:hover { outline-color: var(--secondary); }
-.stored.sel { outline-color: var(--text); }
-.stored.ghost { position: fixed; left: 0; top: 0; z-index: 60; pointer-events: none; box-shadow: 0 10px 30px #000c; outline-color: var(--text); }
-.tempo-thread path.pulse { stroke: var(--text); stroke-width: 2.5; opacity: 1; }
+.stored.sel { outline-color: var(--bright); }
+.stored.ghost { position: fixed; left: 0; top: 0; z-index: 60; pointer-events: none; box-shadow: 0 10px 30px #000c; outline-color: var(--bright); }
+.tempo-thread path.pulse { stroke: var(--bright); stroke-width: 2.5; opacity: 1; }
 .tempo-thread { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 .tempo-thread path { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linecap: round; opacity: 0.75; }
 .card { position: relative; }
@@ -199,7 +200,7 @@ body.at-table #drawer { display: flex; }
 .lane { position: relative; }
 .tempo-thread { z-index: 2; }
 .card-n { position: absolute; top: 0; width: 26px; height: 26px; border-radius: 50%; padding: 0; cursor: grab; touch-action: none; font-weight: 600; font-size: 12px; background: var(--bg); border-color: var(--accent); z-index: 1; }
-.card.sel .card-n { background: var(--text); color: var(--bg); border-color: var(--text); }
+.card.sel .card-n { background: var(--bright); color: var(--bg); border-color: var(--bright); }
 .card.cut .card-n { border-color: var(--dim); }
 /* The tie and its bow. Cut, the bow comes undone and the two ends swing loose. */
 .tie-art { position: absolute; top: 26px; overflow: visible; pointer-events: none; }
@@ -222,7 +223,7 @@ body.at-table #drawer { display: flex; }
 @media (prefers-reduced-motion: reduce) { .tie-art .tie-up, .tie-art .tie-down, .tie-art .bow { transition: none !important; } }
 .card-pic { display: block; outline: 1px solid #ffffff24; outline-offset: -1px; cursor: zoom-in; }
 .card-pic:hover { outline-color: var(--secondary); }
-.card.sel .card-pic { outline-color: var(--text); }
+.card.sel .card-pic { outline-color: var(--bright); }
 .card.dragging { opacity: 0.3; }
 .card.dragging .card-n { cursor: grabbing; }
 .card-add { width: 100%; border-style: dashed; border-radius: 0; color: var(--dim); font-size: 20px; }
@@ -230,13 +231,13 @@ body.at-table #drawer { display: flex; }
    it moves its thread trails behind. */
 .shuttle { position: absolute; left: 0; top: 0; width: 0; pointer-events: none; z-index: 3; }
 .shuttle.line { border-left: 1.5px solid var(--accent); margin-left: -0.75px; }
-.shuttle.trail::before { content: ''; position: absolute; right: 0; top: -1px; width: 150px; height: 2px; background: linear-gradient(to right, transparent, var(--text)); opacity: 0.7; }
-.shuttle i { position: absolute; left: -13px; top: -6px; width: 26px; height: 11px; background: var(--text); clip-path: polygon(0 50%, 22% 0, 78% 0, 100% 50%, 78% 100%, 22% 100%); }
+.shuttle.trail::before { content: ''; position: absolute; right: 0; top: -1px; width: 150px; height: 2px; background: linear-gradient(to right, transparent, var(--bright)); opacity: 0.7; }
+.shuttle i { position: absolute; left: -13px; top: -6px; width: 26px; height: 11px; background: var(--bright); clip-path: polygon(0 50%, 22% 0, 78% 0, 100% 50%, 78% 100%, 22% 100%); }
 .shuttle.rest i { pointer-events: auto; cursor: grab; touch-action: none; }
 .shuttle.rest i::after { content: ''; position: absolute; inset: -6px; }
-.drop-line { position: absolute; width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; z-index: 5; }
+.drop-line { position: absolute; width: 2px; margin-left: -1px; background: var(--bright); pointer-events: none; z-index: 5; }
 
-.zoom .here { color: var(--text); }
+.zoom .here { color: var(--bright); }
 .zoom .go { color: var(--accent); }
 .zoom .go.breathe { animation: breathe 1.6s ease-in-out infinite; }
 @keyframes breathe { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
@@ -244,7 +245,7 @@ body.at-table #drawer { display: flex; }
 #fibre-count { align-items: center; }
 #fibre-count[hidden] { display: none; }
 #fibre-count #fib-n { min-width: 42px; border-left: none; color: var(--text); }
-.zoom-grid button.keeps { border-color: var(--text); color: var(--text); }
+.zoom-grid button.keeps { border-color: var(--bright); color: var(--bright); }
 .zoom-grid button.lossy { opacity: 0.45; }
 #zoom-pop .zoom-foot { margin-top: 8px; font-size: 11px; }
 #zoom-pop {
@@ -256,7 +257,7 @@ body.at-table #drawer { display: flex; }
 #zoom-pop p { margin: 0; line-height: 1.4; color: var(--secondary); }
 .zoom-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 8px; }
 .zoom-grid button { padding: 6px 0; font-size: 12px; }
-.zoom-grid button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.zoom-grid button.on { background: var(--bright); color: var(--bg); border-color: var(--bright); }
 #ask {
   max-width: 380px; color: var(--text); background: var(--panel); border: 1px solid #00000060;
   border-radius: 10px; padding: 18px 20px; font-size: 14px; line-height: 1.5;
@@ -283,7 +284,7 @@ body.at-table .thread-tool { display: none; }
 #welcome[hidden] { display: none; }
 #welcome.leaving { opacity: 0; pointer-events: none; }
 .welcome-card { max-width: 400px; text-align: center; background: var(--panel); border: 1px solid #00000060; border-radius: 14px; padding: 26px 28px 22px; box-shadow: 0 10px 40px #000a; }
-.welcome-card h1 { margin: 0 0 8px; font-size: 26px; font-weight: 600; }
+.welcome-card h1 { color: var(--bright); margin: 0 0 8px; font-size: 26px; font-weight: 600; }
 .welcome-card p { margin: 0; font-size: 15px; line-height: 1.5; }
 #welcome-play { font-size: 26px; padding: 12px 24px; border-radius: 12px; border-width: 2px; margin: 22px 0; } /* the toolbar's Play, twice the size */
 .welcome-card ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; color: var(--secondary); font-size: 13px; line-height: 1.4; }
@@ -322,3 +323,17 @@ body.at-table #panel, .drawer-lip { touch-action: none; }
 
 #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 40; max-width: min(440px, calc(100vw - 32px)); text-align: center;
   background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; font-size: 13px; line-height: 1.4; box-shadow: 0 6px 18px #0008; }
+
+/* The accent picker (opened from the console with orimonoAccent(); not part of the machine). */
+#picker { position: fixed; right: 16px; bottom: 16px; z-index: 80; width: 292px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 10px 30px #000a; padding: 10px 12px 12px; font-size: 12px; user-select: text; -webkit-user-select: text; }
+.picker-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; color: var(--bright); font-size: 13px; }
+.picker-head button { border: none; padding: 0 4px; font-size: 16px; }
+.picker-row { display: flex; gap: 8px; align-items: center; }
+.picker-row input[type=color] { width: 44px; height: 30px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: none; }
+.picker-row input[type=text] { flex: 1; min-width: 0; font: inherit; font-size: 13px; color: var(--bright); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
+.picker-ideas { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin: 10px 0; }
+.picker-ideas button { height: 26px; padding: 0; border: 2px solid transparent; }
+.picker-ideas button.on { border-color: var(--bright); }
+.picker-facts { margin: 0; line-height: 1.6; color: var(--secondary); }
+.picker-facts i { color: var(--warn); font-style: normal; }

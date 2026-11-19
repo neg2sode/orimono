@@ -3,7 +3,8 @@ import '@fontsource/space-grotesk/500.css';
 import '@fontsource/space-grotesk/600.css';
 import './style.css';
 
-import { BPM_MAX, BPM_MIN, DEFAULT_VELOCITY, MAX_ZOOM, PALETTE, ROWS, UI, threadSeconds, type RowTag } from './constants';
+import { BPM_MAX, BPM_MIN, DEFAULT_VELOCITY, MAX_ZOOM, PALETTE, ROWS, threadSeconds, type RowTag } from './constants';
+import { openPicker, restoreAccent, setAccent } from './picker';
 import { Engine, type RowMix } from './audio';
 import { History } from './history';
 import { LABEL_W, cellL, cellR, computeLayout, dropIndex, hitTest, inNumberLane, touchStripTarget, type Layout, type Target } from './layout';
@@ -2001,6 +2002,7 @@ function tick() {
   renderer.draw(p, layout, { ...view, rect: selRect(), quiet, endX: endAnchor?.x });
 }
 
+restoreAccent(() => { if (tableOpen && !tableBusy) renderTable(); });
 updatePanel();
 requestAnimationFrame(frame);
 
@@ -2009,8 +2011,8 @@ if (import.meta.env.DEV) Object.assign(window, { __rg: { engine, scheduler, get 
 // For tracking down sound trouble: type orimonoSound() in the browser console.
 Object.assign(window, {
   // To see the first launch again (the bloom and the welcome): type orimonoWelcome() in the console.
-  // For trying accent colours: orimonoAccent('#8bc0bc') changes it until the page is reloaded.
-  orimonoAccent: (hex: string) => { UI.play = hex; document.documentElement.style.setProperty('--accent', hex); if (tableOpen && !tableBusy) renderTable(); },
+  // For trying accent colours: orimonoAccent() opens a small picker; orimonoAccent('#8bc0bc') sets one directly.
+  orimonoAccent: (hex?: string) => { if (hex) setAccent(hex); else openPicker(); },
   orimonoWelcome: () => { localStorage.removeItem(WELCOME_KEY); location.reload(); },
   orimonoSound: () => ({
     audio: engine.ctx.state, clock: engine.ctx.currentTime, sampleRate: engine.ctx.sampleRate, soundsLoaded: engine.loaded,
