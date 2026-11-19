@@ -5,10 +5,10 @@ import { PALETTE, UI } from './constants';
 import { oklab } from './colour';
 
 const KEY = 'orimono.accent';
-const DEFAULT = '#D5C9B1';
+const DEFAULT = '#DBA868';
 // Starting points: the current one, then colours from outside the thread palette.
 const IDEAS: [string, string][] = [
-  ['Now', '#D5C9B1'], ['Caramel (before)', '#DBA868'], ['Amber', '#F2B441'], ['Orange', '#FF7A1A'], ['Coral', '#F0714F'], ['Pink', '#F27DB0'],
+  ['Caramel (now)', '#DBA868'], ['Pale sand (tried)', '#D5C9B1'], ['Amber', '#F2B441'], ['Orange', '#FF7A1A'], ['Coral', '#F0714F'], ['Pink', '#F27DB0'],
   ['Violet', '#A98BFF'], ['Blue', '#5B9DFF'], ['Sky', '#4CC3F0'], ['Mint', '#5FD4C0'], ['Green', '#6FD36B'], ['White', '#E8E8E8'],
 ];
 

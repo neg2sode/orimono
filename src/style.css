@@ -10,7 +10,7 @@
   --text: #bfbfbf;
   --bright: #e8e8e8; /* used sparingly: where you are, what is picked or selected, and "Stop" */
   --tag: #3a3a3a;
-  --accent: #d5c9b1;
+  --accent: #dba868;
   --warn: #e1707c;
   font-family: 'Space Grotesk', system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
@@ -193,19 +193,19 @@ body.at-table #drawer { display: flex; }
 .stored.ghost { position: fixed; left: 0; top: 0; z-index: 60; pointer-events: none; box-shadow: 0 10px 30px #000c; outline-color: var(--text); }
 .tempo-thread path.pulse { stroke: var(--text); stroke-width: 2.5; opacity: 1; }
 .tempo-thread { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
-.tempo-thread path { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linecap: round; opacity: 0.75; }
+.tempo-thread path { fill: none; stroke: var(--text); stroke-width: 1.5; stroke-linecap: round; opacity: 0.75; }
 .card { position: relative; }
 /* Above each fabric: its number bead, with a tie down to the strand that runs along the top
    edge of the cloth (where the shuttle glides). */
 .lane { position: relative; }
 .tempo-thread { z-index: 2; }
-.card-n { position: absolute; top: 0; width: 26px; height: 26px; border-radius: 50%; padding: 0; cursor: grab; touch-action: none; font-weight: 600; font-size: 12px; background: var(--bg); border-color: var(--accent); z-index: 1; }
+.card-n { position: absolute; top: 0; width: 26px; height: 26px; border-radius: 50%; padding: 0; cursor: grab; touch-action: none; font-weight: 600; font-size: 12px; background: var(--bg); border-color: var(--text); z-index: 1; }
 .card.sel .card-n { background: var(--bright); color: var(--bg); border-color: var(--bright); }
 .card.cut .card-n { border-color: var(--dim); }
 /* The tie and its bow. Cut, the bow comes undone and the two ends swing loose. */
 .tie-art { position: absolute; top: 26px; overflow: visible; pointer-events: none; }
-.tie-art path, .tie-art circle { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linecap: round; }
-.tie-art circle { fill: var(--accent); stroke: none; }
+.tie-art path, .tie-art circle { fill: none; stroke: var(--text); stroke-width: 1.5; stroke-linecap: round; }
+.tie-art circle { fill: var(--text); stroke: none; }
 .tie-art .tie-up, .tie-art .tie-down, .tie-art .bow { transform-box: view-box; transition: transform 0.5s cubic-bezier(0.3, 1.9, 0.5, 1), opacity 0.2s, stroke 0.3s; }
 .card.cut .tie-art .bow { transform: scale(0) rotate(40deg); opacity: 0; transition: transform 0.25s ease-in, opacity 0.25s; }
 .card.cut .tie-art .tie-up { transform: rotate(-14deg) scaleY(0.82); stroke: var(--dim); }

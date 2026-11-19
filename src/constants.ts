@@ -33,7 +33,7 @@ export const UI = {
   text: '#BFBFBF',
   bright: '#E8E8E8', // used sparingly: where you are, what is picked or selected, and "Stop"
   tag: '#3A3A3A',
-  play: '#D5C9B1',
+  play: '#DBA868',
   warn: '#E1707C',
 };
 
