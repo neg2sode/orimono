@@ -5,11 +5,11 @@ import { PALETTE, UI } from './constants';
 import { oklab } from './colour';
 
 const KEY = 'orimono.accent';
-const DEFAULT = '#DBA868';
+const DEFAULT = '#D5C9B1';
 // Starting points: the current one, then colours from outside the thread palette.
 const IDEAS: [string, string][] = [
-  ['Caramel (now)', '#DBA868'], ['Amber', '#F2B441'], ['Orange', '#FF7A1A'], ['Coral', '#F0714F'], ['Pink', '#F27DB0'],
-  ['Violet', '#A98BFF'], ['Blue', '#5B9DFF'], ['Sky', '#4CC3F0'], ['Mint', '#5FD4C0'], ['Green', '#6FD36B'], ['Lime', '#C3E04A'], ['White', '#E8E8E8'],
+  ['Now', '#D5C9B1'], ['Caramel (before)', '#DBA868'], ['Amber', '#F2B441'], ['Orange', '#FF7A1A'], ['Coral', '#F0714F'], ['Pink', '#F27DB0'],
+  ['Violet', '#A98BFF'], ['Blue', '#5B9DFF'], ['Sky', '#4CC3F0'], ['Mint', '#5FD4C0'], ['Green', '#6FD36B'], ['White', '#E8E8E8'],
 ];
 
 const valid = (hex: string) => /^#[0-9a-f]{6}$/i.test(hex);
