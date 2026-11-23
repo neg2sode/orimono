@@ -149,7 +149,7 @@ const renderer = new Renderer(canvas);
 const view: ViewState = {
   tool: 'draw', hover: { kind: 'none' }, rect: null, groupSel: null, drop: null, playheadId: null, hold: null, stripSel: null, rowSel: null, glow: 0, glowRect: null,
 };
-let lastPointer = 'mouse'; // 'touch' shows Copy / Paste buttons for a selection
+let lastPointer = 'mouse'; // 'touch' places the number menu a little higher
 let touchColW: number | null = null; // touch number menu open: columns hold still
 let clip: Clip | null = null;
 let layout: Layout = computeLayout(pattern(), stage.clientWidth, stage.clientHeight);
@@ -841,25 +841,13 @@ function showActions() {
     actions.classList.add('mix');
     const [r0, r1] = view.rowSel;
     for (let ri = r0; ri <= r1; ri++) actions.append(mixLine(ROWS[ri]));
-    const foot = document.createElement('div');
-    foot.className = 'mix-foot';
-    if (lastPointer === 'touch') {
-      foot.append(button('Copy', doCopy), button('Paste', doPaste, { disabled: !clip }));
-      actions.append(foot);
-    }
     actions.hidden = false;
     const w = actions.offsetWidth, h = actions.offsetHeight;
     const yTop = L.top + r0 * L.rowH, yBot = L.top + (r1 + 1) * L.rowH;
     const y = yBot + 6 + h <= L.numTop ? yBot + 6 : Math.max(4, yTop - h - 6);
     place(LABEL_W + 8 + w / 2, y);
-  } else if (lastPointer === 'touch' && selRect()) {
-    // Touch has no ⌘C / ⌘V, so a selection offers them as buttons. (Random and Clear are in the toolbar.)
-    const r = selRect()!;
-    actions.append(button('Copy', doCopy), button('Paste', doPaste, { disabled: !clip }));
-    const x = (L.xs[r.t0] + L.xs[r.t1]) / 2;
-    const below = L.top + (r.r1 + 1) * L.rowH + 6;
-    place(x, r.r1 > ROWS.length - 5 ? L.top + r.r0 * L.rowH - 60 : below);
   }
+  // A free rectangle shows nothing next to it, on touch as with a mouse.
   actions.hidden = !actions.childElementCount;
 }
 

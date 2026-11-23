@@ -128,7 +128,6 @@ button:focus:not(:focus-visible) { outline: none; }
 .mix-db { width: 58px; font-size: 12px; color: var(--secondary); text-align: right; }
 #actions .mix-toggle { padding: 2px 7px; font-size: 11px; }
 #actions .mix-toggle.on { background: var(--text); color: var(--bg); border-color: var(--text); }
-.mix-foot { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; }
 @media (pointer: coarse) {
   .mix-line input[type=range] { width: min(300px, 50vw); height: 32px; }
   #actions .mix-toggle { min-height: 36px; min-width: 36px; padding: 4px 8px; }
