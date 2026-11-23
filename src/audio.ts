@@ -19,23 +19,44 @@ export interface RowMix { db: number; mute: boolean; solo: boolean }
 
 const CHOKE_FADE = 0.004; // seconds: short enough to feel instant, long enough not to click
 
+type Session = { type: string };
+const session = () => (navigator as Navigator & { audioSession?: Session }).audioSession;
+
 export class Engine {
-  readonly ctx = new AudioContext({ latencyHint: 'interactive' });
-  private master: GainNode;
+  // The sound output. It can be replaced (renew) when the phone hands it back broken after the
+  // screen was off: on iPhones it comes back late (~1.5 s) or obeying the silent switch again.
+  // The decoded sounds are kept and reused by the new output.
+  private _ctx!: AudioContext;
+  get ctx() { return this._ctx; }
+  private master!: GainNode;
   private rows = new Map<RowTag, Row>();
   private voices = new Map<RowTag, Voice>();
   /** Every booked or sounding voice, so Stop can silence hits that haven't started yet. */
   private live = new Set<Voice>();
   private buses = new Map<RowTag, GainNode>();
   private mixState: Partial<Record<RowTag, RowMix>> = {};
+  /** How many times the output has been replaced (shown by orimonoSound()). */
+  renewals = 0;
 
   constructor() {
-    // An instrument, not a notification: on iPhones that allow it (iOS 17 and later), ask to
-    // sound even when the silent switch is on. Elsewhere this does nothing.
+    this.claimSession(false);
+    this.build();
+  }
+
+  // An instrument, not a notification: on iPhones that allow it (iOS 17 and later), ask to
+  // sound even when the silent switch is on. Elsewhere this does nothing. After the screen has
+  // been off iOS can forget the request, so `again` withdraws it and asks afresh.
+  private claimSession(again: boolean) {
     try {
-      const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
-      if (session) session.type = 'playback';
+      const s = session();
+      if (!s) return;
+      if (again) s.type = 'auto';
+      s.type = 'playback';
     } catch { /* not supported: the silent switch decides */ }
+  }
+
+  private build() {
+    this._ctx = new AudioContext({ latencyHint: 'interactive' });
     const limiter = this.ctx.createDynamicsCompressor();
     limiter.threshold.value = -6;
     limiter.knee.value = 6;
@@ -45,6 +66,38 @@ export class Engine {
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.9;
     this.master.connect(limiter).connect(this.ctx.destination);
+    this.buses.clear();
+    for (const tag of this.rows.keys()) this.addBus(tag);
+    this.applyMix();
+  }
+
+  private addBus(tag: RowTag) {
+    const bus = this.ctx.createGain();
+    bus.connect(this.master);
+    this.buses.set(tag, bus);
+  }
+
+  /** Throw the sound output away and make a fresh one, keeping the loaded sounds. Only while
+   *  nothing is playing: the new output's clock starts again from zero. */
+  renew() {
+    const old = this._ctx;
+    this.live.clear();
+    this.voices.clear();
+    this.claimSession(true);
+    this.build();
+    this.renewals++;
+    void old.close().catch(() => { /* already closed */ });
+  }
+
+  /** Let the sound output rest while the page is out of sight and nothing plays. */
+  rest() {
+    if (this.ctx.state === 'running') void this.ctx.suspend().catch(() => {});
+  }
+
+  /** For orimonoSound(): what the phone or browser says about the output. */
+  info() {
+    const c = this.ctx as AudioContext & { outputLatency?: number };
+    return { session: session()?.type ?? 'n/a', baseLatency: c.baseLatency, outputLatency: c.outputLatency, renewals: this.renewals };
   }
 
   async load(base = `${import.meta.env.BASE_URL}kit/`, onProgress?: (done: number, total: number) => void) {
@@ -63,9 +116,7 @@ export class Engine {
           def.layers.map(async (l) => ({ loudDb: l.loudDb, takes: await Promise.all(l.takes.map(decode)) })),
         );
         this.rows.set(def.tag, { def, layers, lastTake: null });
-        const bus = this.ctx.createGain();
-        bus.connect(this.master);
-        this.buses.set(def.tag, bus);
+        this.addBus(def.tag);
       }),
     );
     this.applyMix();

@@ -271,6 +271,8 @@ scheduler.onEnd = () => { playEnded = performance.now(); showPlaying(); };
 function togglePlay() {
   if (!engine.loaded) return;
   const fromWelcome = welcoming;
+  // Still held by the phone (or gone) when Play is pressed: start on a fresh sound output.
+  if (!scheduler.playing && ['interrupted', 'closed'].includes(engine.ctx.state)) engine.renew();
   if (scheduler.playing) {
     scheduler.stop();
     view.playheadId = null;
@@ -341,6 +343,18 @@ function checkSound() {
   }
   note.textContent = `The browser is holding the sound back (audio is "${engine.ctx.state}"). Click anywhere to let it through.`;
 }
+// After the screen has been off, iPhones hand the sound back broken: about 1.5 s late, or
+// obeying the silent switch again, and a refresh doesn't help (closing the tab does). So when
+// the page comes back into view, the sound output is replaced by a fresh one. A desktop tab
+// that kept playing in the background is left alone.
+document.addEventListener('visibilitychange', () => {
+  if (!engine.loaded) return;
+  if (document.hidden) { if (!scheduler.playing) engine.rest(); return; }
+  if (scheduler.playing && engine.ctx.state === 'running') return;
+  if (scheduler.playing) { scheduler.stop(); view.playheadId = null; showPlaying(); }
+  engine.renew();
+});
+window.addEventListener('pageshow', (e) => { if (e.persisted && engine.loaded && !scheduler.playing) engine.renew(); });
 // Any press or key is a chance to wake the sound, not only Play.
 for (const type of ['pointerdown', 'keydown'] as const) {
   window.addEventListener(type, () => { engine.resume(); window.setTimeout(checkSound, 300); }, true);
@@ -2016,7 +2030,7 @@ Object.assign(window, {
   orimonoWelcome: () => { localStorage.removeItem(WELCOME_KEY); location.reload(); },
   orimonoSound: () => ({
     audio: engine.ctx.state, clock: engine.ctx.currentTime, sampleRate: engine.ctx.sampleRate, soundsLoaded: engine.loaded,
-    playing: scheduler.playing, tempo: scheduler.bpm?.(), fabrics: items.length,
+    ...engine.info(), playing: scheduler.playing, tempo: scheduler.bpm?.(), fabrics: items.length,
     quietRows: ROWS.filter((t) => mix[t]?.mute || (ROWS.some((x) => mix[x]?.solo) && !mix[t]?.solo)), levels: mix,
   }),
 });
