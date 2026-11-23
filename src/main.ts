@@ -571,12 +571,11 @@ function updateLevel() {
     const r = fibre.region, now = regionFactor(r), has = notesBetween(pattern(), r) > 0;
     const grid = document.createElement('div');
     grid.className = 'zoom-grid';
-    let anyLoss = false;
     for (let m = 1; m <= MAX_ZOOM; m++) {
       const lost = zoomPlan(pattern(), r, m, true).lost;
       const b = button(times(m), () => { pop.hidden = true; void setFactor(m); });
       if (m === now) b.classList.add('on');
-      else if (has && lost) { b.classList.add('lossy'); anyLoss = true; }
+      else if (has && lost) b.classList.add('lossy');
       else if (has) b.classList.add('keeps');
       b.title = m === 1 ? 'No fibres: back to plain cells' : lost ? `${m} fibres per thread: clears ${lost} note${lost === 1 ? '' : 's'}` : `${m} fibres per thread`;
       grid.append(b);
@@ -584,12 +583,6 @@ function updateLevel() {
     const head = document.createElement('p');
     head.textContent = 'Fibres per thread';
     pop.append(head, grid);
-    if (anyLoss) {
-      const foot = document.createElement('p');
-      foot.className = 'zoom-foot';
-      foot.textContent = 'Bright: keeps every note. Dim: clears some notes between the beats (it asks first).';
-      pop.append(foot);
-    }
   };
   // One button. With a selection, or inside a region, the whole of it goes between threads and
   // fibres. Otherwise it has two halves: the thread line slides on to the next fabric (once
@@ -636,24 +629,30 @@ function toast(text: string, ms = 2000) {
 }
 if (arrivalNote) toast(arrivalNote, 9000);
 
-// Share: the open fabric as a link. Copied on a computer; handed to the share sheet on a phone.
+// Share: the open fabric as a link, copied, the same on every device.
 const SHARED_KEY = 'orimono.shared';
+/** Copy text. The clipboard API needs a secure page; the older copy command works anywhere. */
+async function copyText(text: string): Promise<boolean> {
+  try { await navigator.clipboard.writeText(text); return true; } catch { /* fall through */ }
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.cssText = 'position:fixed;top:0;left:0;opacity:0;font-size:16px;'; // 16px: no zoom on iOS
+  document.body.append(area);
+  area.select();
+  area.setSelectionRange(0, text.length);
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  area.remove();
+  return ok;
+}
 $('share').onclick = async () => {
   const url = `${location.origin}${location.pathname}#${packFabric(pattern(), bpmOf(items[cur]))}`;
-  let said = 'Link copied.';
-  try {
-    if (matchMedia('(pointer: coarse)').matches && navigator.share) { await navigator.share({ title: 'Orimono', url }); said = ''; }
-    else await navigator.clipboard.writeText(url);
-  } catch (err) {
-    if ((err as Error).name === 'AbortError') return; // the share sheet was closed
-    window.prompt('Copy this link:', url);
-    said = '';
-  }
+  if (!(await copyText(url))) { window.prompt('Copy this link:', url); return; } // only if copying is impossible
   // The first time, say what a link holds.
-  if (!localStorage.getItem(SHARED_KEY)) {
-    localStorage.setItem(SHARED_KEY, '1');
-    toast(`${said} A link carries this fabric's beat and tempo. Sounds and row levels stay with you.`.trim(), 8000);
-  } else if (said) toast(said);
+  const first = !localStorage.getItem(SHARED_KEY);
+  localStorage.setItem(SHARED_KEY, '1');
+  toast(first ? 'Link copied. It shares only the beat: this fabric\'s notes and tempo.' : 'Link copied.', first ? 6000 : 2000);
 };
 $('sounds').onclick = () => $<HTMLDialogElement>('credits').showModal();
 

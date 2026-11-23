@@ -250,7 +250,6 @@ body.at-table #drawer { display: flex; }
 #fibre-count #fib-n { min-width: 42px; border-left: none; color: var(--text); }
 .zoom-grid button.keeps { border-color: var(--text); color: var(--text); }
 .zoom-grid button.lossy { opacity: 0.45; }
-#zoom-pop .zoom-foot { margin-top: 8px; font-size: 11px; }
 #zoom-pop {
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 5; width: 232px;
   background: var(--panel); border: 1px solid #00000060; border-radius: 8px; box-shadow: 0 6px 18px #0008;
@@ -345,16 +344,18 @@ body.at-table #panel, .drawer-lip { touch-action: none; }
    match): two rows. Row 1 holds the tools; row 2 the tempo knob (low enough that a drag up has
    room before the top of the screen), the zoom button and the length. */
 @media (max-width: 1239px) {
-  #panel { row-gap: 8px; }
-  /* A line break: tools above it, tempo and zoom below. (Its empty line adds one more row gap,
-     which parts the two groups a little more than the rows of tools.) */
+  /* Every row the same distance apart: the space comes from the items' own margins, so the
+     line break below adds none. */
+  #panel { row-gap: 0; padding-top: 6px; padding-bottom: 6px; }
+  #panel > * { margin-top: 4px; margin-bottom: 4px; }
+  /* A line break: tools above it, tempo and zoom below. */
   #panel::after { content: ''; order: 1; flex-basis: 100%; height: 0; }
   #panel > .tempo { order: 2; }
   #panel > .panel-end { order: 3; }
 }
 /* Phones: the same layout, a little smaller and closer together. */
 @media (max-width: 719px) {
-  #panel { padding: 10px 14px; column-gap: 9px; row-gap: 7px; }
+  #panel { padding: 6px 14px; column-gap: 9px; }
   #panel button { padding: 6px 10px; }
   #panel #zoom-pop button { padding: 6px 0; } /* the fibre choices keep their own size */
   #panel .brand { font-size: 16px; padding: 4px 5px; margin: 0 2px 0 -5px; }
@@ -377,4 +378,29 @@ body.at-table #panel, .drawer-lip { touch-action: none; }
   .knob { width: 34px; height: 34px; }
   #bpm-input { left: 40px; }
   #panel .zoom { width: 58px; }
+  .knob { width: 32px; height: 32px; }
+  .bpm span { font-size: 18px; }
+  #bpm-input { left: 38px; }
+  #panel #fibre-count button { padding: 6px 6px; }
+  #fibre-count #fib-n { min-width: 30px; }
+}
+/* When the tools need two lines, they line up in columns: Undo / Redo and Share under Draw /
+   Select, Clear under Random. */
+@media (max-width: 579px) {
+  #panel { display: grid; grid-template-columns: repeat(4, max-content); justify-content: space-between; justify-items: start; align-items: center; }
+  #panel::after { display: none; }
+  #panel > .brand { grid-area: 1 / 1; }
+  #panel > #play { grid-area: 1 / 2; }
+  #panel > #tools { grid-area: 1 / 3; }
+  #panel > .random-wrap { grid-area: 1 / 4; justify-self: stretch; }
+  #panel > .random-wrap > #random { flex: 1; }
+  #panel #undo, #panel #redo, #panel #share { padding-left: 8px; padding-right: 8px; } /* room between them under Draw / Select */
+  #panel > #undo-redo { grid-area: 2 / 3; justify-self: start; }
+  #panel > #share { grid-area: 2 / 3; justify-self: end; }
+  #panel > #clear { grid-area: 2 / 4; justify-self: stretch; }
+  #panel > #fabric-tools { grid-area: 1 / 3 / 2 / 5; justify-self: start; }
+  #panel > .tempo { grid-area: 3 / 1 / 4 / 3; justify-self: start; }
+  #panel > .panel-end { grid-area: 3 / 2 / 4 / 5; justify-self: end; margin-left: 0; }
+  body.at-table #panel > .tempo { grid-row: 2; }
+  body.at-table #panel > .panel-end { grid-row: 2; }
 }
