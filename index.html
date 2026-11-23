@@ -15,7 +15,8 @@
       <button id="sounds" class="brand" title="About the sounds">Orimono</button>
       <button id="play" class="primary" title="Play / Stop (Space)" disabled>Play</button>
       <div class="tempo">
-        <div id="knob" class="knob" title="Tempo: drag up/down, scroll or arrow keys (whole BPM). Double-click to type an exact value, like 72.5." tabindex="0">
+        <div id="knob" class="knob" title="Tempo: drag up or right for faster, down or left for slower. Double-tap to type an exact value, like 72.5." tabindex="0">
+          <i class="knob-mark up" aria-hidden="true"></i><i class="knob-mark down" aria-hidden="true"></i>
           <svg viewBox="0 0 48 48" aria-hidden="true">
             <circle cx="24" cy="24" r="19" class="knob-body" />
             <path id="knob-arc" class="knob-arc" d="" />
@@ -23,7 +24,7 @@
           </svg>
         </div>
         <div class="bpm"><span id="bpm">72</span><small>BPM</small></div>
-        <input id="bpm-input" type="number" min="10" max="300" step="0.1" hidden />
+        <input id="bpm-input" type="number" inputmode="decimal" enterkeyhint="done" min="10" max="300" step="0.1" hidden />
       </div>
       <div id="tools" class="seg thread-tool" role="group" aria-label="Tool">
         <button id="tool-draw" class="on" title="Draw (D): tap, swipe, long-press to pluck">Draw</button>

@@ -228,7 +228,7 @@ function updatePanel() {
   document.querySelector('.tempo')!.classList.toggle('own', !listening() && ownTempo());
   $('knob').title = listening()
     ? 'Listening speed in here, counted in fibres. It does not change the tempo outside.'
-    : 'Tempo: drag up/down, scroll or arrow keys (whole BPM). Double-click to type an exact value, like 72.5.';
+    : 'Tempo: drag up or right for faster, down or left for slower. Double-tap to type an exact value, like 72.5.';
   if (fibre && zoomGoal === 1) {
     // Inside a region the readout is about the region: its fibres, and how long Play takes.
     const r = fibre.region, nT = r.t1 - r.t0 + 1, z = regionFactor(r);
@@ -695,42 +695,54 @@ $('sounds').onclick = () => $<HTMLDialogElement>('credits').showModal();
   });
 }
 
-// Tempo knob: drag up/down (Shift for finer), scroll, arrow keys, or double-click to type.
-// The knob works on a log scale, so slow tempos get fine control (about 3 px per BPM near 72,
-// 1 px per BPM near 200), and it always lands on whole BPM. Typing allows one decimal.
-// One drag = one undo step.
+// Tempo knob: drag up or right for faster, down or left for slower (Shift for finer), scroll,
+// arrow keys, or double-tap the knob or the number to type. While held, ▲ / ▼ marks show which
+// way is which and the number lights up. The knob works on a log scale, so slow tempos get fine
+// control (about 3 px per BPM near 72, 1 px per BPM near 200), and it always lands on whole BPM.
+// Typing allows one decimal, on a number keypad.
 {
-  const knob = $('knob');
+  const knob = $('knob'), tempoBox = document.querySelector<HTMLElement>('.tempo')!;
   const LOG_PER_PX = 0.0045; // change in ln(BPM) per pixel dragged
   const clampBpm = (b: number) => Math.max(BPM_MIN * tempoScale(), Math.min(BPM_MAX * tempoScale(), b));
   const toBpm = (u: number) => clampBpm(Math.round(Math.exp(u)));
-  let startY = 0, startU = 0;
+  /** Held: the ▲ / ▼ marks show, the one in the direction of the last change lit. */
+  const hold = (on: boolean) => { tempoBox.classList.toggle('held', on); if (!on) tempoBox.classList.remove('up', 'down'); };
+  const change = (next: number) => {
+    const was = tempoReading();
+    if (next === was) return;
+    tempoBox.classList.toggle('up', next > was);
+    tempoBox.classList.toggle('down', next < was);
+    setTempo(next);
+  };
+  let startX = 0, startY = 0, startU = 0;
   knob.addEventListener('pointerdown', (e) => {
     knob.setPointerCapture(e.pointerId);
+    startX = e.clientX;
     startY = e.clientY;
     startU = Math.log(tempoReading());
     history.begin();
+    hold(true);
   });
   knob.addEventListener('pointermove', (e) => {
     if (!knob.hasPointerCapture(e.pointerId)) return;
-    const next = toBpm(startU + (startY - e.clientY) * LOG_PER_PX * (e.shiftKey ? 0.25 : 1));
-    if (next !== tempoReading()) setTempo(next);
+    // Up and right both count as faster, so a drag along the top of the knob works too.
+    const px = (startY - e.clientY) + (e.clientX - startX);
+    change(toBpm(startU + px * LOG_PER_PX * (e.shiftKey ? 0.25 : 1)));
   });
-  const done = () => { history.end(); updatePanel(); };
+  const done = () => { history.end(); hold(false); updatePanel(); };
   knob.addEventListener('pointerup', done);
   knob.addEventListener('pointercancel', done);
   // Scroll: a mouse wheel notch is one BPM; a trackpad's many small scroll events add up smoothly.
   let wheelTimer = 0, wheelU = 0, wheeling = false;
   knob.addEventListener('wheel', (e) => {
     e.preventDefault();
-    if (!wheeling) { history.begin(); wheeling = true; wheelU = Math.log(tempoReading()); }
+    if (!wheeling) { history.begin(); wheeling = true; wheelU = Math.log(tempoReading()); hold(true); }
     const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
     const notch = Math.abs(px) >= 50; // a mouse wheel click
     const cur = tempoReading();
     if (notch) wheelU = Math.log(Math.round(cur) - Math.sign(px));
     else wheelU -= px * LOG_PER_PX * 0.5;
-    const next = toBpm(wheelU);
-    if (next !== cur) setTempo(next);
+    change(toBpm(wheelU));
     window.clearTimeout(wheelTimer);
     wheelTimer = window.setTimeout(() => { wheeling = false; done(); }, 400);
   }, { passive: false });
@@ -742,18 +754,36 @@ $('sounds').onclick = () => $<HTMLDialogElement>('credits').showModal();
     const b = tempoReading();
     setTempo(clampBpm(step > 0 ? Math.floor(b) + 1 : Math.ceil(b) - 1));
   });
+  // Typing: the box opens empty, with the tempo shown faintly, so whatever is typed replaces it
+  // and nothing is selected (on iPhone a selection brings up an edit bubble). Left empty, nothing changes.
   const input = $<HTMLInputElement>('bpm-input');
   const openInput = () => {
-    input.value = String(tempoReading());
+    input.value = '';
+    input.placeholder = String(tempoReading());
     input.hidden = false;
-    input.focus();
-    input.select();
+    input.focus(); // straight from the tap, so a phone's keypad comes up
   };
-  knob.addEventListener('dblclick', openInput);
-  $('bpm').addEventListener('dblclick', openInput);
+  // Double-tap, the same with a finger or a mouse: two short presses close together in time and
+  // place. A single tap does nothing, so tapping around never brings up a keyboard.
+  // It opens on the second tap's click, which comes after the browser has moved focus for the tap
+  // (opening earlier, the knob takes focus back and the box closes) and still counts as a tap,
+  // so a phone shows its keypad.
+  const doubleTap = (el: HTMLElement) => {
+    let downX = 0, downY = 0, downT = 0, lastT = -1e9, lastX = 0, lastY = 0, second = false;
+    el.addEventListener('pointerdown', (e) => { downX = e.clientX; downY = e.clientY; downT = e.timeStamp; });
+    el.addEventListener('pointerup', (e) => {
+      second = false;
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) > 6 || e.timeStamp - downT > 400) { lastT = -1e9; return; }
+      if (e.timeStamp - lastT < 400 && Math.hypot(e.clientX - lastX, e.clientY - lastY) < 30) { lastT = -1e9; second = true; }
+      else { lastT = e.timeStamp; lastX = e.clientX; lastY = e.clientY; }
+    });
+    el.addEventListener('click', () => { if (second) { second = false; openInput(); } });
+  };
+  doubleTap(knob);
+  doubleTap(document.querySelector<HTMLElement>('.bpm')!);
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') input.blur();
-    if (e.key === 'Escape') { input.value = String(tempoReading()); input.blur(); }
+    if (e.key === 'Escape') { input.value = ''; input.blur(); }
   });
   input.addEventListener('blur', () => {
     const v = parseFloat(input.value);
