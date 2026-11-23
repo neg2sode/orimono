@@ -393,3 +393,16 @@ body.at-table #panel, .drawer-lip { touch-action: none; }
   #panel > .panel-end { order: 6; }
 }
 }
+
+/* Phones on their side are too short for every row, the number strip and the toolbar (it would
+   take about 500 px; a phone on its side has 300–350), so Orimono asks to be held upright. */
+#turn { display: none; }
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  #turn {
+    position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    background: var(--bg); color: var(--text); text-align: center; padding: 20px;
+  }
+  #turn svg { width: 56px; height: 56px; fill: none; stroke: var(--secondary); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; margin-bottom: 6px; }
+  #turn p { margin: 0; font-size: 17px; font-weight: 600; }
+  #turn small { color: var(--secondary); font-size: 13px; }
+}

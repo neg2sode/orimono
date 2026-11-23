@@ -7,10 +7,10 @@ import { BPM_MAX, BPM_MIN, DEFAULT_VELOCITY, MAX_ZOOM, PALETTE, ROWS, threadSeco
 import { openPicker, restoreAccent, setAccent } from './picker';
 import { Engine, type RowMix } from './audio';
 import { History } from './history';
-import { LABEL_W, cellL, cellR, computeLayout, dropIndex, hitTest, inNumberLane, touchStripTarget, type Layout, type Target } from './layout';
+import { LABEL_W, cellL, cellR, computeLayout, dropIndex, fitsWidth, hitTest, inNumberLane, touchStripTarget, type Layout, type Target } from './layout';
 import {
   clearRect, copyRect, deleteCell, deleteGroups, duplicateGroups, fresh, getHit, insertAfter, insertFront,
-  insertBack, isBoundary, merge, single, mergeGroups, moveGroups, notesBetween, parse, pasteClip, recolour, regionAt, runs, setHit, split, splitPlain, zoomOf, zoomPlan, zoomRect,
+  isBoundary, merge, single, mergeGroups, moveGroups, notesBetween, parse, pasteClip, recolour, regionAt, runs, setHit, split, splitPlain, zoomOf, zoomPlan, zoomRect,
   type Clip, type Pattern, type Rect,
 } from './model';
 import { packFabric, unpackFabric } from './link';
@@ -159,7 +159,7 @@ let shiftHeld = false;
 let stripAnchor: { x: number; y: number; colW: number } | null = null;
 // After an end "+" makes a new group, pressing again in the same place adds a cell to that
 // group; a new group needs the pointer (or the tap) to go somewhere else first.
-let endAnchor: { x: number; y: number; end: 'front' | 'back'; p: Pattern } | null = null;
+let endAnchor: { x: number; y: number; end: 'front'; p: Pattern } | null = null;
 // (Only while the pattern is still as that press left it: not after an undo or another edit.)
 const atEndAnchor = (x: number, y: number) => !!endAnchor && endAnchor.p === history.current && Math.hypot(x - endAnchor.x, y - endAnchor.y) < 14;
 const selecting = () => !fibre && (view.tool === 'select' || shiftHeld);
@@ -402,7 +402,14 @@ function selRect(): Rect | null {
 }
 
 /** Structure edits move indices around, so selections are dropped after them. */
+/** Whether a pattern may grow to `next`: every cell must still fit the window (no sideways
+ * scrolling), and never past MAX_THREADS. Shrinking is always allowed. */
+const canGrow = (next: Pattern) => next.threads.length <= pattern().threads.length || fitsWidth(next, stage.clientWidth);
+/** Whether one more cell would still fit. */
+const roomForCell = () => fitsWidth(insertAfter(pattern(), pattern().threads.length - 1), stage.clientWidth);
+
 function applyStructure(next: Pattern) {
+  if (!canGrow(next)) return; // no room for another cell: nothing happens
   history.apply(next);
   clearSelection();
 }
@@ -808,7 +815,7 @@ function showActions() {
     actions.append(
       hint,
       ...(b > a ? [button('Merge', doMergeGroups)] : []),
-      button('Duplicate', doDuplicate),
+      button('Duplicate', doDuplicate, { disabled: !canGrow(duplicateGroups(pattern(), a, b)) }),
       button('Delete', doDeleteGroups, { danger: true }),
     );
     const x = (L.xs[L.runs[a].start] + L.xs[L.runs[b].end - 1]) / 2;
@@ -826,7 +833,7 @@ function showActions() {
       showActions();
     };
     actions.append(
-      button('+ cell', () => keep(insertAfter(p, ti), ti)),
+      button('+ cell', () => keep(insertAfter(p, ti), ti), { disabled: !roomForCell() }),
       button('– cell', () => keep(deleteCell(p, ti), n > 1 ? Math.min(ti, n - 2) : null), { danger: true, disabled: n <= 1 }),
       ...(ti < n - 1
         ? [isBoundary(p, ti + 1)
@@ -867,7 +874,9 @@ function doMergeGroups() {
 function doDuplicate() {
   if (!view.groupSel) return;
   const [a, b] = view.groupSel;
-  history.apply(duplicateGroups(pattern(), a, b));
+  const next = duplicateGroups(pattern(), a, b);
+  if (!canGrow(next)) return;
+  history.apply(next);
   showActions();
 }
 function doDeleteGroups() {
@@ -1858,14 +1867,14 @@ function endGesture(e: PointerEvent) {
     view.drop = null;
     showActions();
   } else if (g.kind === 'strip') {
-    const again = atEndAnchor(x, y) && (g.target.kind === 'front' || g.target.kind === 'back');
+    const again = atEndAnchor(x, y) && g.target.kind === 'front';
     const t = again ? g.target : e.pointerType === 'touch' && inNumberLane(layout, y) ? touchStripTarget(layout, x) : hitTest(layout, pattern(), x, y);
     if (JSON.stringify(t) !== JSON.stringify(g.target)) return;
     const p = pattern();
     if (again && endAnchor) {
-      // The new group grows by a cell: at its end for the back "+", at its start for the front one.
+      // The new group grows by a cell, at its start.
       const end = endAnchor;
-      applyStructure(insertAfter(p, end.end === 'back' ? p.threads.length - 1 : 0));
+      applyStructure(insertAfter(p, 0));
       endAnchor = { ...end, p: pattern() };
       view.endAdds = end.end;
       return;
@@ -1874,8 +1883,8 @@ function endGesture(e: PointerEvent) {
       if (e.pointerType !== 'touch') stripAnchor = { x, y, colW: layout.colW };
       applyStructure(t.kind === 'add' ? insertAfter(p, t.ti) : deleteCell(p, t.ti));
     }
-    else if (t.kind === 'front' || t.kind === 'back') {
-      applyStructure(t.kind === 'front' ? insertFront(p) : insertBack(p));
+    else if (t.kind === 'front') {
+      applyStructure(insertFront(p));
       endAnchor = { x, y, end: t.kind, p: pattern() };
       view.endAdds = t.kind;
     }
@@ -2005,7 +2014,7 @@ function tick() {
     : items.length > 1 ? 'Left: on to the next fabric. Right: out to all the fabrics' : 'Out to the table of fabrics';
   const anySolo = ROWS.some((t) => mix[t]?.solo);
   const quiet = ROWS.map((t) => !!mix[t]?.mute || (anySolo && !mix[t]?.solo));
-  renderer.draw(p, layout, { ...view, rect: selRect(), quiet, endX: endAnchor?.x });
+  renderer.draw(p, layout, { ...view, rect: selRect(), quiet, endX: endAnchor?.x, full: !roomForCell() });
 }
 
 restoreAccent(() => { if (tableOpen && !tableBusy) renderTable(); });
@@ -2013,7 +2022,7 @@ updatePanel();
 requestAnimationFrame(frame);
 
 // Development-only handle for automated checks; not present in production builds.
-if (import.meta.env.DEV) Object.assign(window, { __rg: { engine, scheduler, get history() { return history; }, get items() { return items; } } });
+if (import.meta.env.DEV) Object.assign(window, { __rg: { engine, scheduler, get history() { return history; }, get items() { return items; }, get layout() { return layout; } } });
 // For tracking down sound trouble: type orimonoSound() in the browser console.
 Object.assign(window, {
   // To see the first launch again (the bloom and the welcome): type orimonoWelcome() in the console.

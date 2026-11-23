@@ -1,10 +1,15 @@
 // Screen geometry: where every string, row and number sits, and what is under the pointer.
 
-import { ROWS } from './constants';
+import { MAX_THREADS, ROWS } from './constants';
 import { isBoundary, runs, zoomOf, type Pattern, type Rect, type Run } from './model';
 
-export const LABEL_W = 60;
-const PAD_R = 28;
+export const LABEL_W = 48; // the row tags (10–40 px), and under them the "+" for a new group at the start
+const PAD_R = 10;
+/** The narrowest a cell gets. A fabric only grows while every cell still fits the window at
+ * this width (and never past MAX_THREADS), so nothing has to scroll sideways. */
+export const MIN_COL = 11;
+/** The x of the "+" for a new group at the start: under the row tags. */
+export const FRONT_X = 25;
 const TOP = 14;
 const SAME_COLOUR_GAP = 9; // extra space between side-by-side groups of the same colour (§9.1)
 const NUM_H = 44; // number lane: "+" in the top half, "–" in the bottom half
@@ -48,7 +53,7 @@ export function computeLayout(p: Pattern, viewW: number, viewH: number, frozenCo
   for (let i = 1; i < rs.length; i++) if (rs[i].colour === rs[i - 1].colour) sameGaps++;
   const avail = viewW - LABEL_W - PAD_R - sameGaps * SAME_COLOUR_GAP;
   // Fill the window: columns and rows stretch (within limits that keep beads in proportion).
-  let colW = frozenColW ?? Math.max(12, Math.min(140, avail / n));
+  let colW = frozenColW ?? Math.max(MIN_COL, Math.min(140, avail / n));
   let rowH = Math.max(18, Math.min(56, (viewH - TOP - STRIP_H - 12) / ROWS.length));
   const place = (w: number) => {
     const out: number[] = [];
@@ -148,8 +153,7 @@ export type Target =
   | { kind: 'cell'; ti: number; ri: number; slot: number; col: number }
   | { kind: 'add'; ti: number } // "+" on a number
   | { kind: 'del'; ti: number } // "–" on a number
-  | { kind: 'front' } // "+" before the first number: new group at the start
-  | { kind: 'back' } // "+" after the last number: new group at the end
+  | { kind: 'front' } // "+" under the row tags, before the first number: new group at the start
   | { kind: 'split'; g: number }
   | { kind: 'merge'; g: number }
   | { kind: 'band'; run: number }
@@ -187,8 +191,8 @@ export function hitTest(L: Layout, p: Pattern, x: number, y: number): Target {
   if (y >= L.numTop && y < L.numTop + L.numH) {
     // Gaps get a zone either side of the boundary; numbers get the rest.
     const zone = Math.max(4, Math.min(8, L.colW * 0.22));
-    if (x < gapX(L, 0) + Math.min(zone, 4)) return x > gapX(L, 0) - 20 ? { kind: 'front' } : { kind: 'none' };
-    if (x > gapX(L, n) - Math.min(zone, 4)) return x < gapX(L, n) + 20 ? { kind: 'back' } : { kind: 'none' };
+    if (x < gapX(L, 0) + Math.min(zone, 4)) return x > 4 ? { kind: 'front' } : { kind: 'none' };
+    if (x > gapX(L, n) + 6) return { kind: 'none' };
     // Numbers sit under their strings; ✂ and ⋈ sit halfway between two numbers.
     for (let g = 1; g < n; g++) {
       if (Math.abs(x - midX(L, g)) < zone) return isBoundary(p, g) ? { kind: 'merge', g } : { kind: 'split', g };
@@ -203,12 +207,18 @@ export function hitTest(L: Layout, p: Pattern, x: number, y: number): Target {
   return { kind: 'none' };
 }
 
-/** Touch: the number nearest to x (or the front/back "+"), ignoring the fine gap zones. */
-export function touchStripTarget(L: Layout, x: number): { kind: 'front' } | { kind: 'back' } | { kind: 'num'; ti: number } {
-  const n = L.xs.length;
+/** Touch: the number nearest to x (or the front "+"), ignoring the fine gap zones. */
+export function touchStripTarget(L: Layout, x: number): { kind: 'front' } | { kind: 'num'; ti: number } {
   if (x < gapX(L, 0)) return { kind: 'front' };
-  if (x > gapX(L, n)) return { kind: 'back' };
   return { kind: 'num', ti: nearestString(L, x) };
+}
+
+/** Whether every cell of p fits a window viewW wide at the narrowest cell width. */
+export function fitsWidth(p: Pattern, viewW: number): boolean {
+  const n = p.threads.length, rs = runs(p);
+  let sameGaps = 0;
+  for (let i = 1; i < rs.length; i++) if (rs[i].colour === rs[i - 1].colour) sameGaps++;
+  return n <= MAX_THREADS && LABEL_W + n * MIN_COL + sameGaps * SAME_COLOUR_GAP + PAD_R <= viewW;
 }
 
 export const inNumberLane = (L: Layout, y: number) => y >= L.numTop && y < L.numTop + L.numH;

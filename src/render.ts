@@ -1,7 +1,7 @@
 // Drawing (§11): each thread is a vertical string in its group's colour, hits are beads whose
 // size is their velocity, and strings wobble when the playhead plucks them.
 
-import { LABEL_W, cellL, cellR, fibreX, gapX, midX, regionBox, rowY, type Layout, type Target } from './layout';
+import { FRONT_X, LABEL_W, cellL, cellR, fibreX, gapX, midX, regionBox, rowY, type Layout, type Target } from './layout';
 import { PALETTE, ROWS, UI } from './constants';
 import type { Pattern, Rect } from './model';
 
@@ -26,7 +26,9 @@ export interface ViewState {
   /** Thread level: the zoomed region under the pointer (a press goes inside it). */
   hoverRegion?: Rect | null;
   /** The end "+" that was just pressed: pressed again in the same place, it adds a cell. */
-  endAdds?: 'front' | 'back' | null;
+  endAdds?: 'front' | null;
+  /** No room for another cell: the "+" signs are not shown. */
+  full?: boolean;
   /** Where that press was (x): a single "+" waits there, like the one on a number. */
   endX?: number;
 }
@@ -433,7 +435,8 @@ export class Renderer {
     const ny = L.numTop + L.numH / 2;
     const xa = gapX(L, 0), xb = gapX(L, n);
     ctx.fillStyle = UI.panel;
-    roundRect(ctx, xa - 22, L.numTop - 2, xb - xa + 44, L.bandTop + L.bandH + 6 - L.numTop, 8);
+    const x0 = Math.min(xa - 12, FRONT_X - 14); // the strip reaches under the row tags, where the front "+" sits
+    roundRect(ctx, x0, L.numTop - 2, Math.min(xb + 12, L.width - 4) - x0, L.bandTop + L.bandH + 6 - L.numTop, 8);
     ctx.fill();
 
     ctx.textAlign = 'center';
@@ -486,7 +489,7 @@ export class Renderer {
         ctx.globalAlpha = 1;
         ctx.font = `600 14px ${FONT}`;
         ctx.fillStyle = top ? UI.text : UI.dim;
-        ctx.fillText('+', x, L.numTop + L.numH * 0.25);
+        if (!s.full) ctx.fillText('+', x, L.numTop + L.numH * 0.25);
         ctx.fillStyle = top ? UI.dim : UI.warn;
         ctx.fillText('–', x, L.numTop + L.numH * 0.75);
         continue;
@@ -497,7 +500,7 @@ export class Renderer {
         roundRect(ctx, x - pillW / 2, ny - 11, pillW, 22, 6);
         ctx.fill();
       }
-      if ((ti + 1) % L.labelEvery !== 0 && ti !== 0 && !picked) continue;
+      if (ti % L.labelEvery !== 0 && !picked) continue; // narrow cells: every 2nd or 4th number, counting from 1
       const groupStart = L.runs.some((r) => r.start === ti);
       ctx.font = `${groupStart || picked ? 600 : 400} 11px ${FONT}`;
       ctx.fillStyle = picked ? UI.bg : groupStart ? UI.text : UI.dim;
@@ -505,10 +508,11 @@ export class Renderer {
     }
     ctx.globalAlpha = 1;
 
-    // New-group "+" at both ends: always visible, brighter on hover.
-    for (const end of ['front', 'back'] as const) {
-      if (L.u > 0) break; // groups aren't changed from inside a region
-      const x = end === 'front' ? xa - 10 : xb + 10;
+    // New-group "+" at the start, under the row tags: always visible (while there is room for
+    // another cell), brighter on hover. Few people add groups, so there is none at the end.
+    for (const end of ['front'] as const) {
+      if (L.u > 0 || s.full) break; // groups aren't changed from inside a region
+      const x = FRONT_X;
       if (s.endAdds === end && s.endX !== undefined) {
         // Just pressed: under the pointer there is now a single "+" for more cells in the new
         // group, drawn like the "+" on a number (with no "–" beneath it). If a cell's number
@@ -522,7 +526,7 @@ export class Renderer {
         ctx.font = `600 14px ${FONT}`;
         ctx.fillStyle = UI.text;
         ctx.fillText('+', px, ny + 0.5);
-        tooltip(ctx, px + (end === 'front' ? -pillW / 2 : pillW / 2), L.numTop - 4, 'add a cell', end === 'front' ? 'left' : 'right');
+        tooltip(ctx, px - pillW / 2, L.numTop - 4, 'add a cell', 'left');
         if (Math.abs(x - s.endX) < 24) continue; // it stands where the group "+" was
       }
       const hot = h.kind === end && s.endAdds !== end;
@@ -534,7 +538,7 @@ export class Renderer {
       ctx.fillStyle = UI.bg;
       ctx.font = `700 13px ${FONT}`;
       ctx.fillText('+', x, ny + 0.5);
-      if (hot) tooltip(ctx, end === 'front' ? x - 8 : x + 8, L.numTop - 4, end === 'front' ? 'new group at start' : 'new group at end', end === 'front' ? 'left' : 'right');
+      if (hot) tooltip(ctx, x - 8, L.numTop - 4, 'new group at start', 'left');
     }
 
     // Gap targets: ✂ split, ⋈ merge.

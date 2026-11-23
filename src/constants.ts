@@ -44,7 +44,8 @@ export const ROWS = [
 export type RowTag = (typeof ROWS)[number];
 
 export const MIN_THREADS = 1;
-export const MAX_THREADS = 128;
+export const MAX_THREADS = 99; // the most cells a fabric can have; a narrow screen allows fewer (fitsWidth)
+export const MAX_LINK_THREADS = 128; // what a link can carry (older fabrics may be longer than MAX_THREADS)
 export const DEFAULT_VELOCITY = 0.75;
 export const MAX_ZOOM = 7; // most fibres one thread can split into (older saves may hold finer ones; they still play)
 export const BPM_MIN = 10;

@@ -19,7 +19,7 @@
 //     then for each note of the row, in time order: strength in 16 steps (4 bits), and
 //     1 bit: drawn by the user (Random leaves those alone)
 
-import { BPM_MAX, BPM_MIN, MAX_THREADS, PALETTE } from './constants';
+import { BPM_MAX, BPM_MIN, MAX_LINK_THREADS, PALETTE } from './constants';
 import type { Hit, Lane, Pattern } from './model';
 
 const VERSION = '1';
@@ -109,7 +109,7 @@ export function unpackFabric(text: string): { pattern: Pattern; bpm: number } | 
     const r = new Reader(text.slice(1));
     const bpm = (r.get(12) + 100) / 10;
     const n = r.get(7) + 1;
-    if (bpm < BPM_MIN || bpm > BPM_MAX || n > MAX_THREADS) return null;
+    if (bpm < BPM_MIN || bpm > BPM_MAX || n > MAX_LINK_THREADS) return null;
     const p: Pattern = { threads: [], groups: {}, shelf: { resting: [], reuse: 0 }, bpm, nextId: 1 };
     const starts = [true];
     for (let i = 1; i < n; i++) starts.push(r.get(1) === 1);
