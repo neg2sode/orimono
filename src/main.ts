@@ -343,15 +343,20 @@ function checkSound() {
   }
   note.textContent = `The browser is holding the sound back (audio is "${engine.ctx.state}"). Click anywhere to let it through.`;
 }
+// Orimono plays only while it is in view (plan §2): when the page goes out of sight (another
+// tab or app, the screen off) it stops, just as if Stop were pressed, and the sound output
+// rests. (Playing on in the background was tried on 23 Nov 2026 and dropped; it is kept on
+// the branch background-play.)
 // After the screen has been off, iPhones hand the sound back broken: about 1.5 s late, or
 // obeying the silent switch again, and a refresh doesn't help (closing the tab does). So when
-// the page comes back into view, the sound output is replaced by a fresh one. A desktop tab
-// that kept playing in the background is left alone.
+// the page comes back into view, the sound output is replaced by a fresh one.
 document.addEventListener('visibilitychange', () => {
   if (!engine.loaded) return;
-  if (document.hidden) { if (!scheduler.playing) engine.rest(); return; }
-  if (scheduler.playing && engine.ctx.state === 'running') return;
-  if (scheduler.playing) { scheduler.stop(); view.playheadId = null; showPlaying(); }
+  if (document.hidden) {
+    if (scheduler.playing) togglePlay();
+    engine.rest();
+    return;
+  }
   engine.renew();
 });
 window.addEventListener('pageshow', (e) => { if (e.persisted && engine.loaded && !scheduler.playing) engine.renew(); });
