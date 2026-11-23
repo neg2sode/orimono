@@ -476,7 +476,7 @@ function enterFibre(r: Rect) {
   zs.delete(1);
   const next = splitPlain(p, r, zs.size === 1 ? [...zs][0] : lastFactor);
   history.apply(next);
-  clearSelection();
+  setTool('draw'); // Select is off in here; the tool stays Draw on the way back out
   view.hover = { kind: 'none' };
   view.hoverRegion = null;
   stage.scrollTo(0, 0);
@@ -2001,7 +2001,6 @@ function tick() {
   document.querySelector('#zoom .z-fabric')!.classList.toggle('off', inside || hasSel);
   document.querySelector('#zoom .z-thread')!.classList.toggle('next', two && items.length > 1);
   $('zoom').classList.toggle('two', two);
-  document.body.classList.toggle('in-fibres', inside);
   $('zoom').title = tableOpen ? 'Into the picked fabric (Enter)' : inside ? 'Back to the threads (Esc)'
     : hasSel ? 'Go inside the selection: split it into fibres (Enter)'
     : items.length > 1 ? 'Left: on to the next fabric. Right: out to all the fabrics' : 'Out to the table of fabrics';
