@@ -345,25 +345,36 @@ body.at-table #panel, .drawer-lip { touch-action: none; }
    match): two rows. Row 1 holds the tools; row 2 the tempo knob (low enough that a drag up has
    room before the top of the screen), the zoom button and the length. */
 @media (max-width: 1239px) {
-  #panel { row-gap: 0; }
+  #panel { row-gap: 8px; }
+  /* A line break: tools above it, tempo and zoom below. (Its empty line adds one more row gap,
+     which parts the two groups a little more than the rows of tools.) */
   #panel::after { content: ''; order: 1; flex-basis: 100%; height: 0; }
-  #panel > .tempo { order: 2; margin-top: 8px; }
-  #panel > .panel-end { order: 3; margin-top: 8px; }
+  #panel > .tempo { order: 2; }
+  #panel > .panel-end { order: 3; }
 }
 /* Phones: the same layout, a little smaller and closer together. */
 @media (max-width: 719px) {
-  #panel { padding: 10px 14px; column-gap: 9px; }
+  #panel { padding: 10px 14px; column-gap: 9px; row-gap: 7px; }
   #panel button { padding: 6px 10px; }
   #panel #zoom-pop button { padding: 6px 0; } /* the fibre choices keep their own size */
   #panel .brand { font-size: 16px; padding: 4px 5px; margin: 0 2px 0 -5px; }
   .tempo { gap: 6px; }
-  .knob { width: 40px; height: 40px; }
-  .bpm { min-width: 80px; gap: 3px; }
+  .knob { width: 38px; height: 38px; }
+  .bpm { min-width: 74px; gap: 3px; }
   .bpm span { font-size: 21px; }
-  .bpm small { font-size: 10px; min-width: 40px; }
-  #bpm-input { left: 46px; width: 76px; font-size: 16px; }
-  .panel-end { gap: 9px; }
-  #panel .zoom { width: 90px; }
+  .bpm small { font-size: 10px; min-width: 34px; }
+  #bpm-input { left: 44px; width: 76px; font-size: 16px; }
+  .panel-end, .zoom-wrap { gap: 6px; }
+  #panel .zoom { width: 66px; }
+  #panel #fibre-count button { padding: 6px 8px; }
+  #fibre-count #fib-n { min-width: 34px; }
   .zoom > * { height: 25px; }
-  #panel .readout { min-width: 96px; padding: 3px 6px; margin-right: -6px; }
+  #panel .readout { min-width: 70px; padding: 3px 4px; margin-right: -4px; }
+}
+/* The smallest phones: a slightly smaller knob and zoom button keep the tempo row on one line. */
+@media (max-width: 389px) {
+  #panel { column-gap: 7px; }
+  .knob { width: 34px; height: 34px; }
+  #bpm-input { left: 40px; }
+  #panel .zoom { width: 58px; }
 }
