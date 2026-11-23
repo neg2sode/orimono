@@ -336,3 +336,10 @@ body.at-table #panel, .drawer-lip { touch-action: none; }
 .picker-ideas button.on { border-color: var(--bright); }
 .picker-facts { margin: 0; line-height: 1.6; color: var(--secondary); }
 .picker-facts i { color: var(--warn); font-style: normal; }
+
+/* Phones: the tempo knob sits lower in the toolbar, beside the zoom button, so a drag up has room
+   before it runs into the top of the screen. */
+@media (pointer: coarse) and (max-width: 940px) {
+  #panel > .tempo { order: 1; }
+  #panel > .panel-end { order: 2; }
+}
