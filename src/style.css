@@ -41,7 +41,6 @@ button.ghost { border-color: transparent; color: var(--dim); }
 .seg button { border-radius: 0; }
 .seg button:first-child { border-radius: 6px 0 0 6px; }
 .seg button:last-child { border-radius: 0 6px 6px 0; border-left: none; }
-button .icon { display: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
 .seg button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
 
 .tempo { display: flex; align-items: center; gap: 8px; position: relative; }
@@ -380,27 +379,17 @@ body.at-table #panel, .drawer-lip { touch-action: none; }
   #fibre-count #fib-n { min-width: 30px; }
   #panel #undo, #panel #redo, #panel #share { padding-left: 7px; padding-right: 7px; }
 }
-/* Undo, Redo and Share are words; their symbols (in the page, hidden) stand in on the narrowest
-   screens, where the words would not fit under Draw / Select. */
-@media (max-width: 429px) {
-  #undo, #redo, #share { position: relative; }
-  #undo .icon, #redo .icon, #share .icon { display: block; }
-  #undo .label, #redo .label, #share .label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-}
-/* When the tools need two lines, they wrap under the tools they belong with: Undo / Redo and Share
-   under Draw / Select, Clear under Random. Everything keeps its own width and the usual gaps. */
+/* When the tools need two lines: Orimono stays on the left and each line of tools runs to the
+   right edge at its own widths: Play, Draw / Select, Random; then Undo / Redo, Share, Clear. */
 @media (max-width: 659px) {
-  #panel { display: grid; grid-template-columns: repeat(4, max-content) minmax(max-content, 1fr); justify-items: start; align-items: center; }
-  #panel::after { display: none; }
-  #panel > .brand { grid-area: 1 / 1; }
-  #panel > #play { grid-area: 1 / 2; }
-  #panel > #tools { grid-area: 1 / 3 / 2 / 5; }
-  #panel > .random-wrap { grid-area: 1 / 5; }
-  #panel > #undo-redo { grid-area: 2 / 3; }
-  #panel > #share { grid-area: 2 / 4; }
-  #panel > #clear { grid-area: 2 / 5; }
-  #panel > #fabric-tools { grid-area: 1 / 3 / 2 / 6; }
-  #panel > .tempo { grid-area: 3 / 1 / 4 / 3; }
-  #panel > .panel-end { grid-area: 3 / 2 / 4 / 6; justify-self: end; margin-left: 0; }
-  body.at-table #panel > .tempo, body.at-table #panel > .panel-end { grid-row: 2; }
+  #panel { justify-content: flex-end; }
+  #panel > .brand { margin-right: auto; }
+  /* Two line breaks: after Random, and after Clear. */
+  #panel::before { content: ''; order: 1; flex-basis: 100%; height: 0; }
+  #panel::after { order: 4; }
+  #panel > #undo-redo, #panel > #share { order: 2; }
+  #panel > #clear { order: 3; }
+  #panel > .tempo { order: 5; margin-right: auto; }
+  #panel > .panel-end { order: 6; }
+}
 }
