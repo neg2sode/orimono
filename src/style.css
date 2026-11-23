@@ -392,7 +392,6 @@ body.at-table #panel, .drawer-lip { touch-action: none; }
   #panel > .tempo { order: 5; margin-right: auto; }
   #panel > .panel-end { order: 6; }
 }
-}
 
 /* Phones on their side are too short for every row, the number strip and the toolbar (it would
    take about 500 px; a phone on its side has 300–350), so Orimono asks to be held upright. */
