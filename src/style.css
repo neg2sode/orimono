@@ -375,32 +375,28 @@ body.at-table #panel, .drawer-lip { touch-action: none; }
 /* The smallest phones: a slightly smaller knob and zoom button keep the tempo row on one line. */
 @media (max-width: 389px) {
   #panel { column-gap: 7px; }
-  .knob { width: 34px; height: 34px; }
-  #bpm-input { left: 40px; }
-  #panel .zoom { width: 58px; }
   .knob { width: 32px; height: 32px; }
   .bpm span { font-size: 18px; }
   #bpm-input { left: 38px; }
+  #panel .zoom { width: 58px; }
   #panel #fibre-count button { padding: 6px 6px; }
   #fibre-count #fib-n { min-width: 30px; }
+  #panel #undo, #panel #redo, #panel #share { padding-left: 7px; padding-right: 7px; }
 }
-/* When the tools need two lines, they line up in columns: Undo / Redo and Share under Draw /
-   Select, Clear under Random. */
+/* When the tools need two lines, they wrap under the tools they belong with: Undo / Redo and Share
+   under Draw / Select, Clear under Random. Everything keeps its own width and the usual gaps. */
 @media (max-width: 579px) {
-  #panel { display: grid; grid-template-columns: repeat(4, max-content); justify-content: space-between; justify-items: start; align-items: center; }
+  #panel { display: grid; grid-template-columns: repeat(4, max-content) minmax(max-content, 1fr); justify-items: start; align-items: center; }
   #panel::after { display: none; }
   #panel > .brand { grid-area: 1 / 1; }
   #panel > #play { grid-area: 1 / 2; }
-  #panel > #tools { grid-area: 1 / 3; }
-  #panel > .random-wrap { grid-area: 1 / 4; justify-self: stretch; }
-  #panel > .random-wrap > #random { flex: 1; }
-  #panel #undo, #panel #redo, #panel #share { padding-left: 8px; padding-right: 8px; } /* room between them under Draw / Select */
-  #panel > #undo-redo { grid-area: 2 / 3; justify-self: start; }
-  #panel > #share { grid-area: 2 / 3; justify-self: end; }
-  #panel > #clear { grid-area: 2 / 4; justify-self: stretch; }
-  #panel > #fabric-tools { grid-area: 1 / 3 / 2 / 5; justify-self: start; }
-  #panel > .tempo { grid-area: 3 / 1 / 4 / 3; justify-self: start; }
-  #panel > .panel-end { grid-area: 3 / 2 / 4 / 5; justify-self: end; margin-left: 0; }
-  body.at-table #panel > .tempo { grid-row: 2; }
-  body.at-table #panel > .panel-end { grid-row: 2; }
+  #panel > #tools { grid-area: 1 / 3 / 2 / 5; }
+  #panel > .random-wrap { grid-area: 1 / 5; }
+  #panel > #undo-redo { grid-area: 2 / 3; }
+  #panel > #share { grid-area: 2 / 4; }
+  #panel > #clear { grid-area: 2 / 5; }
+  #panel > #fabric-tools { grid-area: 1 / 3 / 2 / 6; }
+  #panel > .tempo { grid-area: 3 / 1 / 4 / 3; }
+  #panel > .panel-end { grid-area: 3 / 2 / 4 / 6; justify-self: end; margin-left: 0; }
+  body.at-table #panel > .tempo, body.at-table #panel > .panel-end { grid-row: 2; }
 }
