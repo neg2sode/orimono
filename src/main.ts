@@ -2001,6 +2001,7 @@ function tick() {
   document.querySelector('#zoom .z-fabric')!.classList.toggle('off', inside || hasSel);
   document.querySelector('#zoom .z-thread')!.classList.toggle('next', two && items.length > 1);
   $('zoom').classList.toggle('two', two);
+  document.body.classList.toggle('in-fibres', inside);
   $('zoom').title = tableOpen ? 'Into the picked fabric (Enter)' : inside ? 'Back to the threads (Esc)'
     : hasSel ? 'Go inside the selection: split it into fibres (Enter)'
     : items.length > 1 ? 'Left: on to the next fabric. Right: out to all the fabrics' : 'Out to the table of fabrics';

@@ -41,6 +41,7 @@ button.ghost { border-color: transparent; color: var(--dim); }
 .seg button { border-radius: 0; }
 .seg button:first-child { border-radius: 6px 0 0 6px; }
 .seg button:last-child { border-radius: 0 6px 6px 0; border-left: none; }
+button .icon { display: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
 .seg button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
 
 .tempo { display: flex; align-items: center; gap: 8px; position: relative; }
@@ -337,9 +338,47 @@ body.at-table #panel, .drawer-lip { touch-action: none; }
 .picker-facts { margin: 0; line-height: 1.6; color: var(--secondary); }
 .picker-facts i { color: var(--warn); font-style: normal; }
 
-/* Phones: the tempo knob sits lower in the toolbar, beside the zoom button, so a drag up has room
-   before it runs into the top of the screen. */
-@media (pointer: coarse) and (max-width: 940px) {
-  #panel > .tempo { order: 1; }
-  #panel > .panel-end { order: 2; }
+/* Narrower than one row (any device, so a phone, a narrowed iPad and a narrowed window all
+   match): two rows. Row 1 holds the tools; row 2 the tempo knob (low enough that a drag up has
+   room before the top of the screen), the zoom button and the length. */
+@media (max-width: 1239px) {
+  #panel { row-gap: 0; }
+  #panel::after { content: ''; order: 1; flex-basis: 100%; height: 0; }
+  #panel > .tempo { order: 2; margin-top: 8px; }
+  #panel > .panel-end { order: 3; margin-top: 8px; }
+}
+/* Phones: the same two rows, everything smaller. Undo / Redo and Share join row 2; inside a
+   region (where Select is off) Draw / Select steps aside and Undo / Redo take its place. */
+@media (max-width: 719px) {
+  #panel { padding: 8px 10px; column-gap: 5px; }
+  #panel button { font-size: 12px; padding: 5px 7px; }
+  #panel #zoom-pop button { padding: 6px 0; } /* the fibre choices keep their own size */
+  #panel .brand { font-size: 14px; padding: 4px 4px; margin: 0 1px 0 -4px; }
+  /* Undo, Redo and Share become icons (their names stay in the tooltips and for screen readers). */
+  #panel #undo, #panel #redo, #panel #share { padding: 5px 7px; position: relative; }
+  #undo .icon, #redo .icon, #share .icon { display: block; }
+  #undo .label, #redo .label, #share .label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  #panel > #undo-redo, #panel > #share { order: 2; margin-top: 8px; }
+  #panel > .tempo { margin-right: 4px; }
+  body.in-fibres #panel > .seg.thread-tool:not(#undo-redo) { display: none; }
+  body.in-fibres #panel > #undo-redo, body.in-fibres #panel > #share { order: 0; margin-top: 0; }
+  .tempo { gap: 5px; }
+  .knob { width: 34px; height: 34px; }
+  .bpm { min-width: 62px; gap: 2px; }
+  .bpm span { font-size: 18px; }
+  .bpm small { font-size: 9px; min-width: 38px; }
+  #bpm-input { left: 40px; width: 70px; font-size: 15px; }
+  .panel-end { gap: 6px; }
+  .zoom-wrap { gap: 6px; }
+  #panel .zoom { width: 64px; padding: 3px 5px; }
+  .zoom > * { height: 22px; }
+  #panel #fibre-count button { padding: 5px 7px; }
+  #fibre-count #fib-n { min-width: 32px; }
+  #panel .readout { min-width: 58px; padding: 2px 4px; margin-right: -4px; font-size: 10px; }
+  .readout span:first-child { font-size: 12px; }
+}
+/* The smallest phones: a narrower zoom button keeps row 2 on one line. */
+@media (max-width: 379px) {
+  #panel .zoom { width: 52px; }
+  #panel > .tempo { margin-right: 0; }
 }
