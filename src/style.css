@@ -41,10 +41,7 @@ button.ghost { border-color: transparent; color: var(--dim); }
 .seg button { border-radius: 0; }
 .seg button:first-child { border-radius: 6px 0 0 6px; }
 .seg button:last-child { border-radius: 0 6px 6px 0; border-left: none; }
-button .icon { display: block; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
-/* Undo, Redo and Share are symbols; their names stay in the tooltips and for screen readers. */
-#undo, #redo, #share { position: relative; padding-left: 10px; padding-right: 10px; }
-#undo .label, #redo .label, #share .label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+button .icon { display: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
 .seg button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
 
 .tempo { display: flex; align-items: center; gap: 8px; position: relative; }
@@ -383,9 +380,16 @@ body.at-table #panel, .drawer-lip { touch-action: none; }
   #fibre-count #fib-n { min-width: 30px; }
   #panel #undo, #panel #redo, #panel #share { padding-left: 7px; padding-right: 7px; }
 }
+/* Undo, Redo and Share are words; their symbols (in the page, hidden) stand in on the narrowest
+   screens, where the words would not fit under Draw / Select. */
+@media (max-width: 429px) {
+  #undo, #redo, #share { position: relative; }
+  #undo .icon, #redo .icon, #share .icon { display: block; }
+  #undo .label, #redo .label, #share .label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+}
 /* When the tools need two lines, they wrap under the tools they belong with: Undo / Redo and Share
    under Draw / Select, Clear under Random. Everything keeps its own width and the usual gaps. */
-@media (max-width: 579px) {
+@media (max-width: 659px) {
   #panel { display: grid; grid-template-columns: repeat(4, max-content) minmax(max-content, 1fr); justify-items: start; align-items: center; }
   #panel::after { display: none; }
   #panel > .brand { grid-area: 1 / 1; }
