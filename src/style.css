@@ -117,20 +117,20 @@ button:focus:not(:focus-visible) { outline: none; }
   #actions button { min-height: 44px; min-width: 44px; padding: 10px 14px; font-size: 15px; }
 }
 
-/* Row actions: faders. */
-#actions.mix { flex-direction: column; align-items: stretch; gap: 4px; padding: 8px 10px; }
-.mix-line { display: flex; align-items: center; gap: 8px; }
+/* Row actions: faders. Small: the slider keeps the browser's look, scaled down with zoom. */
+#actions.mix { flex-direction: column; align-items: stretch; gap: 2px; padding: 5px 8px; }
+.mix-line { display: flex; align-items: center; gap: 6px; }
 .mix-tag {
-  width: 30px; text-align: center; font-size: 10px; font-weight: 600; color: var(--text);
+  width: 26px; text-align: center; font-size: 9px; font-weight: 600; color: var(--text);
   background: var(--tag); border-radius: 3px; padding: 1px 0;
 }
-.mix-line input[type=range] { width: 300px; accent-color: var(--accent); }
-.mix-db { width: 58px; font-size: 12px; color: var(--secondary); text-align: right; }
-#actions .mix-toggle { padding: 2px 7px; font-size: 11px; }
+.mix-line input[type=range] { width: 220px; zoom: 0.65; margin: 0; accent-color: var(--accent); }
+.mix-db { width: 46px; font-size: 11px; color: var(--secondary); text-align: right; }
+#actions .mix-toggle { padding: 0 5px; font-size: 10px; line-height: 16px; }
 #actions .mix-toggle.on { background: var(--text); color: var(--bg); border-color: var(--text); }
 @media (pointer: coarse) {
-  .mix-line input[type=range] { width: min(300px, 50vw); height: 32px; }
-  #actions .mix-toggle { min-height: 36px; min-width: 36px; padding: 4px 8px; }
+  .mix-line input[type=range] { width: min(240px, 40vw); height: 36px; zoom: 0.75; }
+  #actions .mix-toggle { min-height: 30px; min-width: 30px; padding: 2px 6px; font-size: 11px; }
 }
 
 .random-wrap { position: relative; display: flex; }
