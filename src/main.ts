@@ -655,15 +655,15 @@ async function copyText(text: string): Promise<boolean> {
   area.remove();
   return ok;
 }
-// On a touchscreen the phone's own share sheet opens (neg2sode, 24 Nov 2026: an exception to
-// "the same on every device"); on a computer, and wherever there is no share sheet, it is copied.
-const touchShare = () => matchMedia('(pointer: coarse)').matches && typeof navigator.share === 'function';
+// The share sheet opens wherever the browser has one (phones, tablets, Safari on a Mac); where
+// there is none, the link is copied. It follows what the browser can do, not the device.
+const canShare = () => typeof navigator.share === 'function';
 $('share').onclick = async () => {
   const url = `${location.origin}${location.pathname}#${packFabric(pattern(), bpmOf(items[cur]))}`;
   // The first time, say what a link holds.
   const first = !localStorage.getItem(SHARED_KEY);
   const holds = 'It shares only the beat: this fabric\'s notes and tempo.';
-  if (touchShare()) {
+  if (canShare()) {
     try {
       await navigator.share({ title: 'Orimono', url });
       localStorage.setItem(SHARED_KEY, '1');
@@ -2165,12 +2165,27 @@ function tick() {
   renderer.draw(p, layout, { ...view, rect: selRect(), quiet, endX: endAnchor?.x, full: !roomForCell() });
 }
 
+// The idle shimmer: before the table has ever been visited, after a long while with no press,
+// key or scroll, the dim fabric half of the zoom button warms once to the accent and fades back,
+// a quiet "there is more out here". Once per visit; playing on counts as idle (it's listening).
+const IDLE_MS = 40_000;
+let lastInput = performance.now(), shimmered = false;
+for (const t of ['pointerdown', 'keydown', 'wheel'] as const) window.addEventListener(t, () => (lastInput = performance.now()), { capture: true, passive: true });
+window.setInterval(() => {
+  if (shimmered || seen || welcoming || document.hidden || performance.now() - lastInput < IDLE_MS) return;
+  if (!$('zoom').classList.contains('two')) return; // the fabric half isn't showing (a selection, a region, the table)
+  shimmered = true;
+  const el = document.querySelector('#zoom .z-fabric')!;
+  el.classList.add('shimmer');
+  el.addEventListener('animationend', () => el.classList.remove('shimmer'), { once: true });
+}, 1000);
+
 restoreAccent(() => { if (tableOpen && !tableBusy) renderTable(); });
 updatePanel();
 requestAnimationFrame(frame);
 
 // Development-only handle for automated checks; not present in production builds.
-if (import.meta.env.DEV) Object.assign(window, { __rg: { engine, scheduler, get history() { return history; }, get items() { return items; }, get layout() { return layout; } } });
+if (import.meta.env.DEV) Object.assign(window, { __rg: { engine, scheduler, get history() { return history; }, get items() { return items; }, get layout() { return layout; }, idle: () => { lastInput = -1e9; } } });
 // For tracking down sound trouble: type orimonoSound() in the browser console.
 Object.assign(window, {
   // To see the first launch again (the bloom and the welcome): type orimonoWelcome() in the console.

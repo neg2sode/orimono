@@ -263,6 +263,9 @@ body.at-table #drawer { display: flex; }
 .zoom .go { color: var(--accent); }
 .zoom .go.breathe { animation: breathe 1.6s ease-in-out infinite; }
 @keyframes breathe { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+/* The idle shimmer (before the table is first visited): the dim fabric half warms once and fades back. */
+.zoom .z-fabric.shimmer { animation: shimmer 2.4s ease-in-out; }
+@keyframes shimmer { 0%, 100% { color: var(--border); } 35% { color: var(--accent); } }
 @media (prefers-reduced-motion: reduce) { .zoom .go.breathe { animation: none; } .zoom > * { transition: none; } }
 #fibre-count { align-items: center; }
 #fibre-count[hidden] { display: none; }
