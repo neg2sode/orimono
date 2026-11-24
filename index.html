@@ -106,7 +106,8 @@
       <button id="open-project" role="menuitem">Open project…</button>
       <button id="sounds" role="menuitem">About the sounds</button>
     </div>
-    <input id="project-file" type="file" accept=".orimono,application/json" hidden />
+    <!-- No "accept": iPhone greys out file endings it doesn't know, like .orimono. Any file can be picked; one that isn't a project is refused with a note. -->
+    <input id="project-file" type="file" hidden />
     <dialog id="ask">
       <p id="ask-text"></p>
       <form method="dialog"><button value="no">No</button><button id="ask-yes" value="yes" class="danger">Yes</button></form>
