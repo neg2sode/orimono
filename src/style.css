@@ -140,16 +140,17 @@ button:focus:not(:focus-visible) { outline: none; }
   #actions button { min-height: 44px; min-width: 44px; padding: 10px 14px; font-size: 15px; }
 }
 
-/* Row actions: faders. Small: the slider keeps the browser's look, scaled down with zoom. */
-#actions.mix { flex-direction: column; align-items: stretch; gap: 2px; padding: 5px 8px; }
-.mix-line { display: flex; align-items: center; gap: 6px; }
+/* Row actions: faders. Small: the slider keeps the browser's look, scaled down with zoom.
+   The row names match the grid's row tags exactly (30 × 16, 10px). */
+#actions.mix { flex-direction: column; align-items: stretch; gap: 3px; padding: 6px 9px; }
+.mix-line { display: flex; align-items: center; gap: 7px; }
 .mix-tag {
-  width: 26px; text-align: center; font-size: 9px; font-weight: 600; color: var(--text);
-  background: var(--tag); border-radius: 3px; padding: 1px 0;
+  width: 30px; height: 16px; line-height: 16px; text-align: center; font-size: 10px; font-weight: 600; color: var(--text);
+  background: var(--tag); border-radius: 3px; flex: none;
 }
-.mix-line input[type=range] { width: 220px; zoom: 0.65; margin: 0; accent-color: var(--accent); }
-.mix-db { width: 46px; font-size: 11px; color: var(--secondary); text-align: right; }
-#actions .mix-toggle { padding: 0 5px; font-size: 10px; line-height: 16px; }
+.mix-line input[type=range] { width: 220px; zoom: 0.72; margin: 0; accent-color: var(--accent); }
+.mix-db { width: 48px; font-size: 11px; color: var(--secondary); text-align: right; }
+#actions .mix-toggle { min-width: 22px; padding: 0 6px; font-size: 11px; line-height: 19px; }
 #actions .mix-toggle.on { background: var(--text); color: var(--bg); border-color: var(--text); }
 @media (pointer: coarse) {
   .mix-line input[type=range] { width: min(240px, 40vw); height: 36px; zoom: 0.75; }

@@ -12,7 +12,8 @@ interface Manifest { rows: RowDef[] }
 interface Take { buffer: AudioBuffer; lead: number }
 interface Layer { loudDb: number; takes: Take[] }
 interface Row { def: RowDef; layers: Layer[]; lastTake: Take | null }
-interface Voice { src: AudioBufferSourceNode; gain: GainNode; base: number }
+/** A sounding hit. `at`: the moment it was played for (its beat, before any lead-in). */
+interface Voice { src: AudioBufferSourceNode; gain: GainNode; base: number; at: number }
 
 /** A row's fader: level in dB (0 = the kit's own level), mute and solo. */
 export interface RowMix { db: number; mute: boolean; solo: boolean }
@@ -235,10 +236,14 @@ export class Engine {
       src.onended = () => { src.disconnect(); gain.disconnect(); };
       return;
     }
-    this.choke(tag, startAt);
-    for (const other of row.def.chokes) this.choke(other, startAt);
+    // A new hit on a row stops what that row was still ringing. A closing hat also stops the
+    // open hat, as a foot on the pedal would, but only a sound that began before it (notes drawn
+    // at the same moment both sound) and only if the closing hat can be heard: a muted row, or one
+    // left out by a solo, is as if it weren't there.
+    this.choke(tag, startAt, when);
+    if (this.audible(tag)) for (const other of row.def.chokes) this.choke(other, startAt, when);
     src.start(startAt, offset);
-    const voice = { src, gain, base };
+    const voice = { src, gain, base, at: when };
     this.voices.set(tag, voice);
     this.live.add(voice);
     src.onended = () => {
@@ -249,9 +254,10 @@ export class Engine {
     };
   }
 
-  private choke(tag: RowTag, when: number) {
+  /** Stop what row `tag` is ringing, at `when`, if it began before the moment `at`. */
+  private choke(tag: RowTag, when: number, at: number) {
     const voice = this.voices.get(tag);
-    if (!voice) return;
+    if (!voice || voice.at >= at - 1e-6) return;
     voice.gain.gain.setValueAtTime(voice.base, when);
     voice.gain.gain.linearRampToValueAtTime(0, when + CHOKE_FADE);
     try {
@@ -266,6 +272,12 @@ export class Engine {
   setMix(mix: Partial<Record<RowTag, RowMix>>) {
     this.mixState = mix;
     this.applyMix();
+  }
+
+  /** Whether a row can be heard: not muted, and not left out by another row's solo. */
+  private audible(tag: RowTag) {
+    const m = this.mixState[tag];
+    return !m?.mute && (!Object.values(this.mixState).some((x) => x?.solo) || !!m?.solo);
   }
 
   private applyMix() {
