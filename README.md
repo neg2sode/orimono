@@ -40,7 +40,7 @@ Other commands:
   Saving downloads a `.orimono` file holding the table, the drawer, the tempo and the row levels (not the undo
   history). Opening one asks first, then replaces all of that. You can also drop a file onto the window.
   It's the way to move work between browsers and devices, and a safety net if the browser clears its storage.
-- **Share:** copies a link that holds the open fabric (its beat and tempo; not sounds or row levels). Opening a link
+- **Share:** on a touchscreen opens the share sheet, on a computer copies, a link that holds the open fabric (its beat and tempo; not sounds or row levels). Opening a link
   adds that fabric at the end of the table. Nothing is sent to a server: the beat is in the address itself.
 - The first launch shows a short welcome; `orimonoWelcome()` in the browser console shows it again.
 - The interface is neutral grey so that the threads' colours stand out; `orimonoAccent()` in the console opens a

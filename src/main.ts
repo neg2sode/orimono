@@ -655,13 +655,28 @@ async function copyText(text: string): Promise<boolean> {
   area.remove();
   return ok;
 }
+// On a touchscreen the phone's own share sheet opens (neg2sode, 24 Nov 2026: an exception to
+// "the same on every device"); on a computer, and wherever there is no share sheet, it is copied.
+const touchShare = () => matchMedia('(pointer: coarse)').matches && typeof navigator.share === 'function';
 $('share').onclick = async () => {
   const url = `${location.origin}${location.pathname}#${packFabric(pattern(), bpmOf(items[cur]))}`;
-  if (!(await copyText(url))) { window.prompt('Copy this link:', url); return; } // only if copying is impossible
   // The first time, say what a link holds.
   const first = !localStorage.getItem(SHARED_KEY);
+  const holds = 'It shares only the beat: this fabric\'s notes and tempo.';
+  if (touchShare()) {
+    try {
+      await navigator.share({ title: 'Orimono', url });
+      localStorage.setItem(SHARED_KEY, '1');
+      if (first) toast(`A link ${holds.slice(3)}`, 6000);
+      return;
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return; // the share sheet was closed
+      // anything else: copy instead
+    }
+  }
+  if (!(await copyText(url))) { window.prompt('Copy this link:', url); return; } // only if copying is impossible
   localStorage.setItem(SHARED_KEY, '1');
-  toast(first ? 'Link copied. It shares only the beat: this fabric\'s notes and tempo.' : 'Link copied.', first ? 6000 : 2000);
+  toast(first ? `Link copied. ${holds}` : 'Link copied.', first ? 6000 : 2000);
 };
 
 // ---------------------------------------------------------------- the menu: project file and credits
