@@ -12,7 +12,7 @@
   <body>
     <div id="drawer"><div id="shelf"></div><div class="drawer-lip"><i></i></div></div>
     <header id="panel">
-      <button id="sounds" class="brand" title="About the sounds">Orimono</button>
+      <button id="brand" class="brand" title="Save, open, and about the sounds" aria-haspopup="menu" aria-expanded="false">Orimono</button>
       <button id="play" class="primary" title="Play / Stop (Space)" disabled>Play</button>
       <div class="tempo">
         <div id="knob" class="knob" title="Tempo: drag up or right for faster, down or left for slower. Double-tap to type an exact value, like 72.5." tabindex="0">
@@ -100,6 +100,13 @@
       <p>Changes: hits trimmed, mixed to stereo, EQ'd, some shortened, levels set.</p>
       <form method="dialog"><button>Close</button></form>
     </dialog>
+    <!-- Behind the name: the project file and the credits. -->
+    <div id="menu" role="menu" hidden>
+      <button id="save-project" role="menuitem">Save project</button>
+      <button id="open-project" role="menuitem">Open project…</button>
+      <button id="sounds" role="menuitem">About the sounds</button>
+    </div>
+    <input id="project-file" type="file" accept=".orimono,application/json" hidden />
     <dialog id="ask">
       <p id="ask-text"></p>
       <form method="dialog"><button value="no">No</button><button id="ask-yes" value="yes" class="danger">Yes</button></form>

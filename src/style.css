@@ -81,7 +81,7 @@ button.ghost { border-color: transparent; color: var(--dim); }
 .length-wrap { position: relative; display: flex; align-self: center; }
 .readout { border: 1px solid transparent; padding: 4px 8px; background: transparent; display: flex; flex-direction: column; justify-content: center; font-size: 12px; color: var(--secondary); line-height: 1.3; text-align: right; min-width: 132px; } /* fixed room, so the zoom button beside it never moves */
 .divider { width: 1px; align-self: stretch; margin: 2px 0; background: #ffffff1c; }
-#sounds { padding-left: 6px; padding-right: 6px; }
+#brand { padding-left: 6px; padding-right: 6px; }
 .readout span:first-child { color: var(--text); font-size: 14px; }
 .readout:hover:not(:disabled) { border-color: var(--border); }
 .readout.on { border-color: var(--secondary); }
@@ -91,6 +91,17 @@ button.ghost { border-color: transparent; color: var(--dim); }
   padding: 10px 12px; font-size: 13px; text-align: right;
 }
 #new-pop[hidden] { display: none; }
+/* The menu behind the name: Save project, Open project, About the sounds. */
+#menu {
+  position: fixed; z-index: 30; min-width: 180px; display: flex; flex-direction: column; padding: 5px;
+  background: var(--panel); border: 1px solid #00000060; border-radius: 8px; box-shadow: 0 6px 18px #0008;
+}
+#menu[hidden] { display: none; }
+#menu button { text-align: left; border-color: transparent; background: none; padding: 9px 12px; font-size: 14px; }
+#menu button:hover { border-color: var(--border); }
+.brand.on { border-color: var(--secondary); }
+/* A file held over the window: an outline says it can be dropped. */
+body.dropping::after { content: ''; position: fixed; inset: 6px; border: 2px dashed var(--accent); border-radius: 12px; pointer-events: none; z-index: 60; }
 #new-pop p { margin: 0 0 10px; text-align: left; line-height: 1.4; }
 #new-pop small { color: var(--secondary); }
 button.danger:hover { border-color: var(--warn); color: var(--warn); }

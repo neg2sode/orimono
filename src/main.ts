@@ -14,6 +14,7 @@ import {
   type Clip, type Pattern, type Rect,
 } from './model';
 import { packFabric, unpackFabric } from './link';
+import { MAX_FABRICS, FILE_EXT, fileName, projectData, projectFile, readFile, readProject, type Project, type Stored } from './project';
 import { STYLES, randomFillStyled } from './random';
 import { Renderer, type ViewState } from './render';
 import { Scheduler } from './scheduler';
@@ -38,9 +39,7 @@ const PROJECT_KEY = 'orimono.project.v1';
 interface Item { id: number; history: History; bpm: number | null }
 // The shelf: fabrics put away for later (each with its own tempo, if its tie was cut), and room
 // for sound resources in a later phase.
-interface Stored { pattern: Pattern; bpm: number | null }
 let shelf: { fabrics: Stored[]; sounds: unknown[] } = { fabrics: [], sounds: [] };
-const MAX_FABRICS = 99;
 
 let saveTimer = 0;
 // Two tabs of Orimono share one saved project. When another tab saves (a link opened there, or
@@ -54,13 +53,18 @@ window.addEventListener('storage', (e) => {
   if (document.hidden) document.addEventListener('visibilitychange', () => location.reload(), { once: true });
   else location.reload();
 });
+/** The project as it stands: the table (fabrics in order), the drawer, and settings (tempo, row levels). */
+function currentProject(): Project {
+  return {
+    fabrics: items.map((it) => ({ ...it.history.current, bpm: it.bpm ?? projectBpm })),
+    own: items.map((it) => it.bpm !== null),
+    cur, bpm: projectBpm, seen, shelf, mix,
+  };
+}
 function saveNow() {
   window.clearTimeout(saveTimer);
   if (stale) return;
-  // A project: the table (fabrics in order), the shelf, and settings (tempo, row levels).
-  const fabrics = items.map((it) => ({ ...it.history.current, bpm: it.bpm ?? projectBpm }));
-  const own = items.map((it) => it.bpm !== null);
-  localStorage.setItem(PROJECT_KEY, JSON.stringify({ v: 1, fabrics, own, cur, bpm: projectBpm, seen, shelf, mix }));
+  localStorage.setItem(PROJECT_KEY, JSON.stringify(projectData(currentProject())));
 }
 function save() {
   window.clearTimeout(saveTimer);
@@ -83,17 +87,15 @@ const WELCOME_KEY = 'orimono.welcomed';
 let welcoming = !localStorage.getItem(WELCOME_KEY);
 try {
   const raw = JSON.parse(localStorage.getItem(PROJECT_KEY) ?? 'null');
-  if (raw && Array.isArray(raw.fabrics)) {
-    items = (raw.fabrics as unknown[]).map((f, i) => { const p = parse(f); return p ? makeItem(p, raw.own?.[i] ? p.bpm : null) : null; }).filter((x): x is Item => !!x);
-    if (raw.shelf && Array.isArray(raw.shelf.fabrics)) {
-      const kept = (raw.shelf.fabrics as { pattern?: unknown; bpm?: unknown }[]).map((f) => ({ pattern: parse(f?.pattern), bpm: typeof f?.bpm === 'number' ? f.bpm : null }));
-      shelf = { fabrics: kept.filter((f): f is Stored => !!f.pattern), sounds: raw.shelf.sounds ?? [] };
-    }
-    if (raw.mix && typeof raw.mix === 'object') savedMix = raw.mix;
-    cur = Math.max(0, Math.min(items.length - 1, raw.cur | 0));
-    if (typeof raw.bpm === 'number') projectBpm = raw.bpm;
-    seen = !!raw.seen;
-  } else {
+  const got = raw && Array.isArray(raw.fabrics) ? readProject(raw, false) : null;
+  if (got && got !== 'newer') {
+    items = got.fabrics.map((p, i) => makeItem(p, got.own[i] ? p.bpm : null));
+    shelf = got.shelf;
+    savedMix = got.mix;
+    cur = got.cur;
+    projectBpm = got.bpm;
+    seen = got.seen;
+  } else if (!raw || !Array.isArray(raw.fabrics)) {
     // A save from before fabrics: one pattern, which becomes the first fabric.
     const old = JSON.parse(localStorage.getItem(STORE_KEY) ?? localStorage.getItem(OLD_STORE_KEY) ?? 'null');
     const p = old && parse(old);
@@ -533,7 +535,7 @@ function updateLevel() {
   updatePanel();
   $('fibre-count').hidden = !inside;
   $<HTMLButtonElement>('tool-select').disabled = inside || tableOpen;
-  for (const id of ['tool-draw', 'random', 'clear', 'length']) $<HTMLButtonElement>(id).disabled = tableOpen;
+  for (const id of ['tool-draw', 'random', 'clear']) $<HTMLButtonElement>(id).disabled = tableOpen;
   // On the table the thread tools make way for what can be done with a picked fabric.
   document.body.classList.toggle('at-table', tableOpen);
   $<HTMLButtonElement>('fab-dup').disabled = tableSel < 0 || items.length >= MAX_FABRICS;
@@ -661,7 +663,84 @@ $('share').onclick = async () => {
   localStorage.setItem(SHARED_KEY, '1');
   toast(first ? 'Link copied. It shares only the beat: this fabric\'s notes and tempo.' : 'Link copied.', first ? 6000 : 2000);
 };
-$('sounds').onclick = () => $<HTMLDialogElement>('credits').showModal();
+
+// ---------------------------------------------------------------- the menu: project file and credits
+
+// Behind the name: Save project, Open project, About the sounds. The same everywhere.
+const menu = $('menu'), brand = $('brand');
+function closeMenu() { menu.hidden = true; brand.classList.remove('on'); brand.setAttribute('aria-expanded', 'false'); }
+brand.onclick = (e) => {
+  e.stopPropagation();
+  if (!menu.hidden) return closeMenu();
+  const r = brand.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, r.left)}px`;
+  menu.style.top = `${r.bottom + 6}px`;
+  menu.hidden = false;
+  brand.classList.add('on');
+  brand.setAttribute('aria-expanded', 'true');
+};
+document.addEventListener('pointerdown', (e) => { if (!menu.hidden && !(e.target as HTMLElement).closest('#menu, #brand')) closeMenu(); });
+window.addEventListener('resize', closeMenu);
+$('sounds').onclick = () => { closeMenu(); $<HTMLDialogElement>('credits').showModal(); };
+
+/** Save: the project downloads as a file (undo history is not kept). */
+function saveProjectFile() {
+  closeMenu();
+  // octet-stream, so no browser adds ".json" to the name
+  const blob = new Blob([projectFile(currentProject())], { type: 'application/octet-stream' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = fileName();
+  document.body.append(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  toast('Project saved.');
+}
+$('save-project').onclick = saveProjectFile;
+
+/** Open: a broken file, or one from a newer Orimono, is refused and nothing changes. Otherwise it
+ * asks, then the project replaces the table, the drawer and the settings. It is written where the
+ * browser keeps the project and the page loads again, the same way as any refresh. */
+async function openProjectFile(file: File) {
+  closeMenu();
+  if (welcoming || stale) return;
+  let text = '';
+  try { text = await file.text(); } catch { /* unreadable: refused below */ }
+  const got = readFile(text);
+  if (got === 'newer') return toast('This project was saved by a newer Orimono. Reload the page, then open it again.', 6000);
+  if (!got) return toast(`This file couldn't be opened. It isn't an Orimono project (${FILE_EXT}), or part of it is missing.`, 6000);
+  if (!(await ask('Open this project? It replaces the table and drawer here.', 'Open'))) return;
+  if (scheduler.playing) togglePlay();
+  stale = true; // nothing may save over it now, not even leaving the page
+  window.clearTimeout(saveTimer);
+  localStorage.setItem(PROJECT_KEY, JSON.stringify(projectData(got)));
+  location.reload();
+}
+const fileInput = $<HTMLInputElement>('project-file');
+function chooseProjectFile() {
+  closeMenu();
+  fileInput.value = ''; // the same file can be chosen again
+  fileInput.click();
+}
+$('open-project').onclick = chooseProjectFile;
+fileInput.onchange = () => { const f = fileInput.files?.[0]; if (f) void openProjectFile(f); };
+// A file dropped onto the window opens the same way.
+{
+  const hasFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+  let depth = 0;
+  window.addEventListener('dragenter', (e) => { if (hasFiles(e)) { depth++; document.body.classList.add('dropping'); } });
+  window.addEventListener('dragleave', (e) => { if (hasFiles(e) && --depth <= 0) { depth = 0; document.body.classList.remove('dropping'); } });
+  window.addEventListener('dragover', (e) => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer!.dropEffect = 'copy'; } });
+  window.addEventListener('drop', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    depth = 0;
+    document.body.classList.remove('dropping');
+    const f = e.dataTransfer!.files[0];
+    if (f) void openProjectFile(f);
+  });
+}
 
 // New sits behind the length readout: picking it shows what it does before it does it.
 {
@@ -674,10 +753,13 @@ $('sounds').onclick = () => $<HTMLDialogElement>('credits').showModal();
     if (open) {
       pop.hidden = false;
       $('length').classList.add('on');
-      $('new-what').textContent = items.length === 1 ? 'This will reset everything: the work here, the tempo and the row levels.' : 'This will reset the work here.';
+      $('new-what').textContent = tableOpen
+        ? 'This will clear the table to one new fabric, and reset the tempo and row levels. The drawer is kept.'
+        : items.length === 1 ? 'This will reset everything: the work here, the tempo and the row levels.' : 'This will reset the work here.';
     }
   };
   $('new').onclick = () => {
+    if (tableOpen) { close(); return clearTable(); }
     applyStructure(fresh());
     if (items.length === 1) {
       // The only fabric: a clean start all round, tempo and row levels too.
@@ -1563,6 +1645,24 @@ function duplicateFabric(i: number) {
   pickCard(i + 1);
 }
 
+/** Start from scratch on the table: one new fabric, the tempo and row levels as at the start.
+ * The drawer is kept (what was put away there was put away to keep). Not an undo step. */
+function clearTable() {
+  if (!tableOpen || tableBusy) return;
+  if (scheduler.playing) togglePlay();
+  items = [makeItem(fresh())];
+  cur = 0;
+  history = items[0].history;
+  playId = items[0].id;
+  playStart = null;
+  projectBpm = fresh().bpm;
+  mix = {};
+  engine.setMix(mix);
+  renderer.reset();
+  save();
+  pickCard(-1);
+}
+
 async function deleteFabric(i: number) {
   if (items.length < 2) return;
   if (!(await ask(`Delete fabric ${i + 1}? It can't be brought back.`, 'Delete'))) return;
@@ -1936,6 +2036,9 @@ window.addEventListener('keydown', (e) => {
   if ($<HTMLDialogElement>('credits').open || $<HTMLDialogElement>('ask').open) return;
   if (welcoming && e.key === 'Escape') return closeWelcome(false);
   const mod = e.metaKey || e.ctrlKey;
+  if (mod && !e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); return saveProjectFile(); }
+  if (mod && !e.shiftKey && e.key.toLowerCase() === 'o') { e.preventDefault(); return chooseProjectFile(); }
+  if (e.key === 'Escape' && !menu.hidden) return closeMenu();
   if (tableOpen) {
     // Out on the table: pick with the arrows, Enter goes in, ⌘D duplicates, Delete deletes.
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }

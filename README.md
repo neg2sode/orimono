@@ -30,10 +30,16 @@ Other commands:
   press it again in the same place to add cells to that group.
 - **Row names:** with Select, click a row's name for its level fader, mute and solo.
 - **Random:** fills your groups (or the selection) with a beat in one of six styles. Notes you drew yourself stay.
-- **Tempo knob:** drag up/down (Shift for fine), scroll, or double-click to type.
-- Space: Play/Stop · ⌘Z / ⇧⌘Z: undo/redo · Delete: clear selection · M: merge · ⌘D: duplicate · Esc: deselect.
+- **Tempo knob:** drag up or right for faster, down or left for slower (Shift for fine), or scroll.
+  Double-tap the knob or the number to type an exact tempo.
+- Space: Play/Stop · ⌘S / ⌘O: save / open the project · ⌘Z / ⇧⌘Z: undo/redo · Delete: clear selection · M: merge · ⌘D: duplicate · Esc: deselect.
 - Everything autosaves in the browser. Click the length readout to start a fabric from scratch
-  (with only one fabric, that resets the tempo and row levels too).
+  (with only one fabric, that resets the tempo and row levels too). On the table, the same readout clears the
+  table to one new fabric and resets the tempo and levels; the drawer is kept.
+- **Save and open a project:** press the name, **Orimono**, for Save project, Open project and About the sounds.
+  Saving downloads a `.orimono` file holding the table, the drawer, the tempo and the row levels (not the undo
+  history). Opening one asks first, then replaces all of that. You can also drop a file onto the window.
+  It's the way to move work between browsers and devices, and a safety net if the browser clears its storage.
 - **Share:** copies a link that holds the open fabric (its beat and tempo; not sounds or row levels). Opening a link
   adds that fabric at the end of the table. Nothing is sent to a server: the beat is in the address itself.
 - The first launch shows a short welcome; `orimonoWelcome()` in the browser console shows it again.
