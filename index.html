@@ -106,8 +106,10 @@
       <button id="open-project" role="menuitem">Open project…</button>
       <button id="sounds" role="menuitem">About the sounds</button>
     </div>
-    <!-- No "accept": iPhone greys out file endings it doesn't know, like .orimono. Any file can be picked; one that isn't a project is refused with a note. -->
-    <input id="project-file" type="file" hidden />
+    <!-- "application/octet-stream" is any data file: iPhone then goes straight to Files (no photo library)
+         and doesn't grey out .orimono, an ending it doesn't know; ".orimono" keeps it pickable on a computer.
+         A file that isn't a project is refused with a note. -->
+    <input id="project-file" type="file" accept="application/octet-stream,.orimono" hidden />
     <dialog id="ask">
       <p id="ask-text"></p>
       <form method="dialog"><button value="no">No</button><button id="ask-yes" value="yes" class="danger">Yes</button></form>
