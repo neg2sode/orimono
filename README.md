@@ -64,7 +64,8 @@ The button at the top right shows where you are and where a press takes you.
   bow. Pick a fabric's number, then press its bow to cut it: that fabric keeps a tempo of its own, set inside it
   with the tempo knob. Press again to tie it back. (Unpicked, the bow is just there to be plucked.)
 - **The drawer:** scroll up over the toolbar (on a touchscreen: swipe down on it), or press the drawer's handle, to
-  pull it out. Drag a fabric by its number onto it to put it away; drag a stored fabric back down for a copy.
+  pull it out. Drag a fabric by its number onto it to keep a copy there (the fabric stays on the table);
+  drag a stored fabric back down for a copy on the table.
 
 ## Code map
 

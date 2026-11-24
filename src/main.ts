@@ -37,7 +37,7 @@ const actions = $<HTMLDivElement>('actions');
 const PROJECT_KEY = 'orimono.project.v1';
 /** bpm: the fabric's own tempo once its tie to the table's tempo thread is cut; null while tied. */
 interface Item { id: number; history: History; bpm: number | null }
-// The shelf: fabrics put away for later (each with its own tempo, if its tie was cut), and room
+// The shelf (the drawer): copies of fabrics kept for later (each with its own tempo, if its tie was cut), and room
 // for sound resources in a later phase.
 let shelf: { fabrics: Stored[]; sounds: unknown[] } = { fabrics: [], sounds: [] };
 
@@ -1280,7 +1280,7 @@ function renderTable() {
       tie.title = !picked ? "A bow in the tie to the table's tempo. Pick the fabric's number to cut or tie it"
         : it.bpm === null ? 'Cut: this fabric keeps a tempo of its own (set it inside, with the tempo knob)' : `Tie: follow the table's tempo again (its own is ${it.bpm} BPM)`;
       tie.dataset.mark = it.bpm === null ? '✂' : '⋈';
-      n.title = `Fabric ${i + 1}, ${lengthOf(it)}${it.bpm !== null ? `, own tempo ${it.bpm} BPM` : ''}. Tap to pick, drag to move or to put away`;
+      n.title = `Fabric ${i + 1}, ${lengthOf(it)}${it.bpm !== null ? `, own tempo ${it.bpm} BPM` : ''}. Tap to pick, drag to move, or onto the drawer to keep a copy`;
     };
     label();
     // With the number picked, a press on the bow cuts (or ties) it. Otherwise the bow is just
@@ -1491,17 +1491,15 @@ function dragStored(el: HTMLCanvasElement, i: number) {
   el.addEventListener('pointercancel', end);
 }
 
-/** Put fabric i away on the shelf: it leaves the table (one fabric always stays). */
+/** Keep a copy of fabric i in the drawer (newest on the left). The fabric stays on the table:
+ * the drawer copies both ways, in and out. (Until 24 Nov 2026 it moved the fabric, and the last
+ * fabric could not go, which looked like the drawer not working.) */
 function storeFabric(i: number) {
-  if (items.length < 2) return;
-  const open = items[cur].id, [it] = items.splice(i, 1);
-  shelf.fabrics.unshift({ pattern: it.history.current, bpm: it.bpm });
-  if (scheduler.playing && playId === it.id) togglePlay();
-  cur = Math.max(0, items.findIndex((x) => x.id === open));
-  history = items[cur].history;
-  renderer.reset();
+  const it = items[i];
+  if (!it) return;
+  shelf.fabrics.unshift({ pattern: structuredClone(it.history.current), bpm: it.bpm });
   save();
-  pickCard(-1);
+  pickCard(i);
 }
 
 async function deleteStored(i: number) {
@@ -1594,9 +1592,11 @@ function dragCard(handle: HTMLElement, card: HTMLElement, i: number) {
       card.classList.add('dragging');
     }
     ghost.style.transform = `translate(${home!.left + e.clientX - x0}px, ${e.clientY - 22}px)`; // held near its top edge, so it goes where the pointer goes
-    // Over the shelf it would be put away; anywhere else it lands among the other fabrics.
-    const away = overShelf(e.clientY) && items.length > 1;
+    // Over the drawer a copy goes in (the fabric stays, so it stops looking faint); anywhere
+    // else it lands among the other fabrics.
+    const away = overShelf(e.clientY);
     drawer.classList.toggle('over', away);
+    card.classList.toggle('dragging', !away);
     if (away) { to = -1; line.remove(); return; }
     const place = dropPlace(e.clientX, e.clientY, card);
     to = place.to;
