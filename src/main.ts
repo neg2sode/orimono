@@ -14,6 +14,7 @@ import {
   type Clip, type Pattern, type Rect,
 } from './model';
 import { packFabric, unpackFabric } from './link';
+import { hitsOf, midi, wav, type Part } from './export';
 import { MAX_FABRICS, FILE_EXT, fileName, projectData, projectFile, readFile, readProject, type Project, type Stored } from './project';
 import { STYLES, randomFillStyled } from './random';
 import { Renderer, type ViewState } from './render';
@@ -698,20 +699,71 @@ document.addEventListener('pointerdown', (e) => { if (!menu.hidden && !(e.target
 window.addEventListener('resize', closeMenu);
 $('sounds').onclick = () => { closeMenu(); $<HTMLDialogElement>('credits').showModal(); };
 
+/** Hand the browser a file to download. */
+function download(blob: Blob, name: string) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+}
+
 /** Save: the project downloads as a file (undo history is not kept). */
 function saveProjectFile() {
   closeMenu();
   // octet-stream, so no browser adds ".json" to the name
-  const blob = new Blob([projectFile(currentProject())], { type: 'application/octet-stream' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = fileName();
-  document.body.append(a);
-  a.click();
-  a.remove();
-  window.setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  download(new Blob([projectFile(currentProject())], { type: 'application/octet-stream' }), fileName());
   toast('Project saved.');
 }
+
+// Export: what Play plays, one time round. On the table, every fabric in order (each at its own
+// tempo); otherwise the open fabric.
+function exportParts(): { parts: Part[]; names: string[]; what: string; stem: string } {
+  const day = fileName().slice(0, -FILE_EXT.length);
+  if (tableOpen && items.length > 1) {
+    return {
+      parts: items.map((it) => ({ pattern: it.history.current, bpm: bpmOf(it) })),
+      names: items.map((_, i) => `Fabric ${i + 1}`),
+      what: `all ${items.length} fabrics`,
+      stem: `${day}-table`,
+    };
+  }
+  const i = tableOpen ? Math.max(0, tableSel) : cur;
+  return { parts: [{ pattern: items[i].history.current, bpm: bpmOf(items[i]) }], names: [], what: items.length > 1 ? `fabric ${i + 1}` : 'the fabric', stem: `${day}-fabric-${i + 1}` };
+}
+let exporting = false;
+/** WAV: rendered offline with the same sounds and levels as Play, as a seamless loop (what rings
+ *  past the end is carried round to the start), so it loops cleanly in other software. */
+async function exportWav() {
+  closeMenu();
+  if (exporting) return;
+  if ($<HTMLButtonElement>('play').disabled) return toast('The sounds are still loading.');
+  exporting = true;
+  const { parts, what, stem } = exportParts();
+  toast(`Recording ${what}…`, 60000);
+  try {
+    const { hits, seconds } = hitsOf(parts);
+    const buf = await engine.render(hits, seconds);
+    download(wav([buf.getChannelData(0), buf.getChannelData(1)], buf.sampleRate), `${stem}.wav`);
+    toast(`Saved ${what} as WAV (${seconds.toFixed(2)} s, one time round).`, 4000);
+  } catch (err) {
+    console.error(err);
+    toast("The recording couldn't be made.", 4000);
+  } finally {
+    exporting = false;
+  }
+}
+/** MIDI: the notes on drum channel 10, General MIDI drum sounds, strengths as velocities. */
+function exportMidi() {
+  closeMenu();
+  const { parts, names, what, stem } = exportParts();
+  download(new Blob([midi(parts, names)], { type: 'audio/midi' }), `${stem}.mid`);
+  toast(`Saved ${what} as MIDI.`);
+}
+$('export-wav').onclick = () => void exportWav();
+$('export-midi').onclick = exportMidi;
 $('save-project').onclick = saveProjectFile;
 
 /** Open: a broken file, or one from a newer Orimono, is refused and nothing changes. Otherwise it

@@ -40,6 +40,9 @@ Other commands:
   Saving downloads a `.orimono` file holding the table, the drawer, the tempo and the row levels (not the undo
   history). Opening one asks first, then replaces all of that. You can also drop a file onto the window.
   It's the way to move work between browsers and devices, and a safety net if the browser clears its storage.
+- **Export WAV / Export MIDI** (same menu): what Play plays, one time round: the open fabric, or on the table every
+  fabric in order. The WAV is recorded with the same sounds and levels you hear, as a seamless loop; the MIDI holds
+  the notes on drum channel 10 (General MIDI drums), strengths as velocities, with each fabric's tempo.
 - **Share:** opens the share sheet where the browser has one (or else copies) with a link that holds the open fabric (its beat and tempo; not sounds or row levels). Opening a link
   adds that fabric at the end of the table. Nothing is sent to a server: the beat is in the address itself.
 - The first launch shows a short welcome; `orimonoWelcome()` in the browser console shows it again.

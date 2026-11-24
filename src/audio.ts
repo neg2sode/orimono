@@ -26,8 +26,9 @@ export class Engine {
   // The sound output. It can be replaced (renew) when the phone hands it back broken after the
   // screen was off: on iPhones it comes back late (~1.5 s) or obeying the silent switch again.
   // The decoded sounds are kept and reused by the new output.
-  private _ctx!: AudioContext;
-  get ctx() { return this._ctx; }
+  // (An engine made for rendering works on an offline context; it never uses the live-only calls.)
+  private _ctx!: BaseAudioContext;
+  get ctx() { return this._ctx as AudioContext; }
   private master!: GainNode;
   private rows = new Map<RowTag, Row>();
   private voices = new Map<RowTag, Voice>();
@@ -38,7 +39,14 @@ export class Engine {
   /** How many times the output has been replaced (shown by orimonoSound()). */
   renewals = 0;
 
-  constructor() {
+  constructor(offline?: { ctx: OfflineAudioContext; from: Engine }) {
+    if (offline) {
+      this._ctx = offline.ctx;
+      this.rows = offline.from.rows;
+      this.mixState = offline.from.mixState;
+      this.graph();
+      return;
+    }
     this.claimSession(false);
     this.build();
   }
@@ -57,6 +65,10 @@ export class Engine {
 
   private build() {
     this._ctx = new AudioContext({ latencyHint: 'interactive' });
+    this.graph();
+  }
+
+  private graph() {
     const limiter = this.ctx.createDynamicsCompressor();
     limiter.threshold.value = -6;
     limiter.knee.value = 6;
@@ -86,12 +98,55 @@ export class Engine {
     this.claimSession(true);
     this.build();
     this.renewals++;
-    void old.close().catch(() => { /* already closed */ });
+    void (old as AudioContext).close().catch(() => { /* already closed */ });
   }
 
   /** Let the sound output rest while the page is out of sight and nothing plays. */
   rest() {
     if (this.ctx.state === 'running') void this.ctx.suspend().catch(() => {});
+  }
+
+  /** The longest any sound rings, in seconds (how far a render must start early). */
+  get longestRing() {
+    let s = 0;
+    for (const r of this.rows.values()) for (const l of r.layers) for (const t of l.takes) s = Math.max(s, t.buffer.duration);
+    return s;
+  }
+
+  /**
+   * Render hits into a seamless loop of `seconds` (Export WAV). Hits are given in loop time
+   * (0 to `seconds`). The render starts early by the longest ring, booking the end of the loop
+   * before 0 as well, so the loop's first moments carry the previous time round's ringing tails,
+   * and books the next time round's start, so sounds that swell before their beat are in too.
+   */
+  async render(hits: { row: RowTag; v: number; time: number }[], seconds: number): Promise<AudioBuffer> {
+    const pre = Math.ceil(this.longestRing * 10) / 10;
+    const rate = this.ctx.sampleRate;
+    const ctx = new OfflineAudioContext(2, Math.ceil((pre + seconds) * rate), rate);
+    const e = new Engine({ ctx, from: this });
+    const booked: typeof hits = [];
+    for (let k = -Math.ceil(pre / seconds); k <= 1; k++) {
+      for (const h of hits) {
+        const time = pre + k * seconds + h.time;
+        if (time > -pre && time < pre + seconds + 0.2) booked.push({ ...h, time });
+      }
+    }
+    booked.sort((a, b) => a.time - b.time); // in time order: each hit chokes what its row booked before
+    // Book a second at a time, just ahead of the render: booked all at once, every note sits in
+    // the graph from the start and the render slows down sharply as notes are added.
+    const STEP = 1, total = pre + seconds;
+    let next = 0;
+    const bookUntil = (t: number) => { while (next < booked.length && booked[next].time - 0.15 < t) { const h = booked[next++]; e.play(h.row, h.v, h.time); } };
+    bookUntil(STEP);
+    for (let t = STEP; t < total; t += STEP) {
+      const at = t;
+      void ctx.suspend(at).then(() => { bookUntil(at + STEP); void ctx.resume(); });
+    }
+    const all = await ctx.startRendering();
+    const from = Math.round(pre * rate), n = Math.round(seconds * rate);
+    const out = new AudioBuffer({ numberOfChannels: 2, length: n, sampleRate: rate });
+    for (let c = 0; c < 2; c++) out.copyToChannel(all.getChannelData(c).subarray(from, from + n), c);
+    return out;
   }
 
   /** For orimonoSound(): what the phone or browser says about the output. */
