@@ -8,9 +8,9 @@
   --dim: #8a8a8a;
   --secondary: #a0a0a0;
   --text: #bfbfbf;
-  --bright: #e8e8e8; /* used sparingly: where you are, what is picked or selected, and "Stop" */
+  --bright: #e8e8e8; /* used sparingly: where you are, and what is picked or selected */
   --tag: #3a3a3a;
-  --accent: #dba868;
+  --accent: #875946; /* dark, so the threads stay what stands out; words on it are the text grey */
   --warn: #e1707c;
   font-family: 'Space Grotesk', system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
@@ -34,8 +34,8 @@ button {
 }
 button:hover:not(:disabled) { border-color: var(--secondary); }
 button:disabled { opacity: 0.4; cursor: default; }
-button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
-button.primary.playing { background: var(--bright); border-color: var(--bright); }
+button.primary { background: var(--accent); color: var(--text); border-color: var(--accent); font-weight: 600; }
+button.primary.playing { background: var(--text); border-color: var(--text); color: var(--bg); }
 button.ghost { border-color: transparent; color: var(--dim); }
 .seg { display: flex; }
 .seg button { border-radius: 0; }
@@ -60,7 +60,7 @@ button.ghost { border-color: transparent; color: var(--dim); }
 .tempo.held.up .knob-mark.up { border-bottom-color: var(--accent); }
 .tempo.held.down .knob-mark.down { border-top-color: var(--accent); }
 .bpm span { transition: transform 0.15s, color 0.15s; transform-origin: center 70%; }
-.tempo.held .bpm span { transform: scale(1.07); color: #fff; }
+.tempo.held .bpm span { transform: scale(1.07); color: var(--bright); }
 #bpm-input::placeholder { color: var(--secondary); }
 .bpm { display: flex; align-items: baseline; gap: 4px; min-width: 94px; } /* room for three digits and "playback", so the toolbar holds still */
 .bpm span { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }

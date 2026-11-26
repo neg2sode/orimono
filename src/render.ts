@@ -535,7 +535,7 @@ export class Renderer {
       roundRect(ctx, x - 8, ny - 8, 16, 16, 8);
       ctx.fill();
       ctx.globalAlpha = 1;
-      ctx.fillStyle = UI.bg;
+      ctx.fillStyle = hot ? UI.text : UI.bg;
       ctx.font = `700 13px ${FONT}`;
       ctx.fillText('+', x, ny + 0.5);
       if (hot) tooltip(ctx, x - 8, L.numTop - 4, 'new group at start', 'left');

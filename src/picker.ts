@@ -5,10 +5,10 @@ import { PALETTE, UI } from './constants';
 import { oklab } from './colour';
 
 const KEY = 'orimono.accent';
-const DEFAULT = '#DBA868';
+const DEFAULT = '#875946';
 // Starting points: the current one, then colours from outside the thread palette.
 const IDEAS: [string, string][] = [
-  ['Caramel (now)', '#DBA868'], ['Pale sand (tried)', '#D5C9B1'], ['Amber', '#F2B441'], ['Orange', '#FF7A1A'], ['Coral', '#F0714F'], ['Pink', '#F27DB0'],
+  ['Dark brown (now)', '#875946'], ['Clay brown (tried)', '#A36B53'], ['Caramel (before)', '#DBA868'], ['Pale sand (tried)', '#D5C9B1'], ['Amber', '#F2B441'], ['Orange', '#FF7A1A'], ['Coral', '#F0714F'], ['Pink', '#F27DB0'],
   ['Violet', '#A98BFF'], ['Blue', '#5B9DFF'], ['Sky', '#4CC3F0'], ['Mint', '#5FD4C0'], ['Green', '#6FD36B'], ['White', '#E8E8E8'],
 ];
 
@@ -52,9 +52,10 @@ export function openPicker() {
     if (document.activeElement !== text) text.value = hex;
     const lab = oklab(hex);
     const near = PALETTE.map((c) => ({ name: c.name, d: Math.hypot(...oklab(c.hex).map((v, i) => v - lab[i])) })).sort((a, b) => a.d - b.d)[0];
-    const c = contrast(hex, UI.bg); // the same number both ways round: the accent on the background, and dark words on the accent
+    const c = contrast(hex, UI.bg), w = contrast(hex, UI.text);
     facts.innerHTML = [
-      `Against the background, and dark words on it (Play, Random): ${c.toFixed(1)} to 1${c < 4.5 ? ' — <i>hard to read</i>' : ''}`,
+      `Against the background: ${c.toFixed(1)} to 1${c < 3 ? ' — <i>hard to see</i>' : ''}`,
+      `Grey words on it (Play, Random): ${w.toFixed(1)} to 1${w < 4.5 ? ' — <i>hard to read</i>' : ''}`,
       `Nearest thread colour: ${near.name}${near.d < 0.02 ? ' — <i>the same</i>' : near.d < 0.08 ? ' — <i>close enough to be mistaken for it</i>' : near.d < 0.14 ? ' — a neighbour' : ' — clearly apart'}`,
     ].join('<br>');
     ideas.querySelectorAll<HTMLElement>('button').forEach((b) => b.classList.toggle('on', b.dataset.hex === hex));

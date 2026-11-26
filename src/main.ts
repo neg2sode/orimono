@@ -1629,7 +1629,7 @@ function pulseThread() {
     if (!bead || !pic || !items[i] || items[i].bpm !== null) return;
     const y = card.offsetTop + pic.offsetTop, tx = card.offsetLeft + clothPad(pic.offsetWidth / items[i].history.current.threads.length);
     const far = reach(y) + (y === ys[0] ? Math.abs(tx - kx) : tx - x);
-    bead.animate([{ background: 'var(--bg)', color: 'var(--text)' }, { background: 'var(--accent)', color: 'var(--bg)', offset: 0.25 }, { background: 'var(--bg)', color: 'var(--text)' }],
+    bead.animate([{ background: 'var(--bg)', color: 'var(--text)' }, { background: 'var(--accent)', color: 'var(--text)', offset: 0.25 }, { background: 'var(--bg)', color: 'var(--text)' }],
       { duration: 520, delay: (far / speed) * 1000 });
   });
 }

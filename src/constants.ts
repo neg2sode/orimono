@@ -31,9 +31,9 @@ export const UI = {
   dim: '#8A8A8A',
   secondary: '#A0A0A0',
   text: '#BFBFBF',
-  bright: '#E8E8E8', // used sparingly: where you are, what is picked or selected, and "Stop"
+  bright: '#E8E8E8', // used sparingly: where you are, and what is picked or selected
   tag: '#3A3A3A',
-  play: '#DBA868',
+  play: '#875946', // dark, so the threads stay what stands out
   warn: '#E1707C',
 };
 
