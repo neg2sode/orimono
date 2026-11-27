@@ -50,25 +50,33 @@ export class Renderer {
     this.ctx = canvas.getContext('2d')!;
   }
 
-  // First launch: each part of the machine comes out in its own way, one after another. The
-  // row tags pop down the left edge; the groups and numbers count in along the bottom; then the
-  // strings rise out of their numbers, left to right, each swinging once as it arrives.
+  // First launch: the strings come out of the welcome's gift box. Once its lid pops, they fly
+  // out of it, middle ones first, each stretching to its place and swinging as it lands. Then
+  // the row tags pop down the left edge and the groups and numbers count in along the bottom.
   private bloomAt: number | null = null; // when it began (-1: at the next frame)
   private bloomT = 0; // ms since then
   private bloomed = new Set<number>();
-  bloom() { this.bloomAt = -1; this.bloomed.clear(); }
+  private bloomFrom: () => { x: number; y: number } | null = () => null;
+  /** from: where the strings fly out from, in the canvas's own px (the box's open top). */
+  bloom(from: () => { x: number; y: number } | null) { this.bloomAt = -1; this.bloomed.clear(); this.bloomFrom = from; }
+  private static FLY = 1850; private static SPREAD = 700; private static FLIGHT = 750; // ms: first launch; first to last; one flight
+
+  /** How far string i of n is through its flight out of the box (0: still inside; 1: landed). */
+  private flight(i: number, n: number) {
+    const mid = (n - 1) / 2, rank = mid > 0 ? Math.abs(i - mid) / mid : 0;
+    return Math.max(0, Math.min(1, (this.bloomT - Renderer.FLY - rank * Renderer.SPREAD) / Renderer.FLIGHT));
+  }
 
   /** How big row tag ri is drawn while the tags pop in (0: not yet; a little over 1 on the way). */
   private tagPop(ri: number) {
-    const g = Math.max(0, Math.min(1, (this.bloomT - 500 - ri * 45) / 320));
+    const g = Math.max(0, Math.min(1, (this.bloomT - 2300 - ri * 45) / 320));
     return g <= 0 ? 0 : 1 + 3.4 * Math.pow(g - 1, 3) + 2.4 * Math.pow(g - 1, 2);
   }
 
   /** Clip the picture to what has come out so far. Returns true once everything is out. */
   private bloomClip(p: Pattern, L: Layout, xs: number[]) {
     const { ctx } = this;
-    const STRIP = 1300, STRIP_MS = 900; // the numbers count in
-    const GRID = 2000, SPREAD = 900, GROW = 600; // first string to last; one string's rise
+    const STRIP = 2500, STRIP_MS = 900; // the numbers count in
     const t = this.bloomT, n = xs.length;
     const edge = (i: number) => Math.round(i <= 0 ? LABEL_W - 8 : i < n ? xs[i] - L.pad : L.width);
     const stripY = L.numTop - 2;
@@ -77,14 +85,41 @@ export class Renderer {
     // Groups and numbers: one more number at each step, as if counted.
     const counted = Math.floor(Math.max(0, Math.min(1, (t - STRIP) / STRIP_MS)) * n);
     if (t >= STRIP) ctx.rect(0, stripY, counted >= n ? L.width : edge(counted + 1), L.height - stripY);
-    // Strings: each rises from its number to the top.
+    // Strings: each column shows once its string has landed (in flight, drawFlying draws it).
     p.threads.forEach((th, i) => {
-      const g = Math.max(0, Math.min(1, (t - GRID - (i / Math.max(1, n - 1)) * SPREAD) / GROW)), e = 1 - Math.pow(1 - g, 3);
-      if (e > 0) ctx.rect(edge(i), stripY - stripY * e, edge(i + 1) - edge(i), stripY * e);
-      if (g > 0.7 && !this.bloomed.has(th.id)) { this.bloomed.add(th.id); this.pluck(th.id, 2.8, 0.22, 5); }
+      if (this.flight(i, n) < 1) return;
+      ctx.rect(edge(i), 0, edge(i + 1) - edge(i), stripY);
+      if (!this.bloomed.has(th.id)) { this.bloomed.add(th.id); this.pluck(th.id, 6, 0.35, 5); }
     });
     ctx.clip();
-    return t > GRID + SPREAD + GROW;
+    return t > Math.max(STRIP + STRIP_MS, Renderer.FLY + Renderer.SPREAD + Renderer.FLIGHT) + 200;
+  }
+
+  /** The strings still in flight from the box: each a thread flung out, its top end leading in
+      an arc and its bottom end trailing, bent while it travels and straight as it lands. */
+  private drawFlying(p: Pattern, L: Layout, xs: number[], top: number, bottom: number, colourOf: (ti: number) => string) {
+    const o = this.bloomFrom() ?? { x: L.width / 2, y: L.height / 2 };
+    const { ctx } = this, n = xs.length;
+    ctx.lineWidth = L.colW >= 22 ? 2 : 1.5;
+    ctx.lineCap = 'round';
+    p.threads.forEach((_, i) => {
+      const g = this.flight(i, n);
+      if (g <= 0 || g >= 1) return;
+      const ease = (v: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, v)), 3);
+      const a = ease(g * 1.15), b = ease(g * 1.15 - 0.15); // the top leads, the bottom trails
+      const X = xs[i];
+      const lift = Math.min(160, L.height * 0.25) * Math.sin(Math.PI * a); // up out of the box, then down onto its place
+      const tx = o.x + (X - o.x) * a, ty = Math.max(top, o.y + (top - o.y) * a - lift); // never above the grid's top
+      const bx = o.x + (X - o.x) * b, by = o.y + (bottom - o.y) * b;
+      const side = X < o.x ? -1 : 1, bend = 60 * (1 - g) * side; // whips outward while it flies
+      ctx.globalAlpha = Math.min(1, g * 6) * 0.85;
+      ctx.strokeStyle = colourOf(i);
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.quadraticCurveTo((tx + bx) / 2 + bend, (ty + by) / 2, bx, by);
+      ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
   }
 
   /** Forget every string's place and swing: a different fabric is about to be drawn. */
@@ -426,7 +461,10 @@ export class Renderer {
       ctx.fillRect(0, L.numTop - 2, L.width, L.height - L.numTop + 2);
     }
     this.drawStrip(p, L, s, xs);
-    if (blooming) ctx.restore();
+    if (blooming) {
+      ctx.restore();
+      this.drawFlying(p, L, xs, y0, y0 + span, colourOf);
+    }
   }
 
   private drawStrip(p: Pattern, L: Layout, s: ViewState, xs: number[]) {

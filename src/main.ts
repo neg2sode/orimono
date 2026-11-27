@@ -320,12 +320,16 @@ function closeWelcome(fly: boolean) {
   void flying.animate([{ transform: from }, { transform: 'none' }], { duration: 650, easing: 'cubic-bezier(.65,0,.35,1)' }).finished.then(() => { flying.remove(); done(); });
 }
 if (welcoming) {
-  // First launch: the machine comes out part by part (toolbar, row tags, groups and numbers,
-  // strings), and the welcome comes up last, like a title.
+  // First launch: the gift box drops in and pops open, the strings fly out of it to their
+  // places, the rest of the machine comes out around them, and the card fills in around the box.
   if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
     document.body.classList.add('intro');
-    renderer.bloom();
-    window.setTimeout(() => document.body.classList.remove('intro'), 8500);
+    // The strings fly out of the box's open top.
+    renderer.bloom(() => {
+      const m = document.querySelector('.gift-inside')?.getBoundingClientRect(), c = canvas.getBoundingClientRect();
+      return m && m.width ? { x: m.left + m.width / 2 - c.left, y: m.top + m.height / 2 - c.top } : null;
+    });
+    window.setTimeout(() => document.body.classList.remove('intro'), 6900);
   }
   document.body.classList.add('welcoming');
   $('welcome').hidden = false;
