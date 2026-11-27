@@ -117,24 +117,31 @@
       <form method="dialog"><button value="no">No</button><button id="ask-yes" value="yes" class="danger">Yes</button></form>
     </dialog>
     <div id="welcome" hidden>
-      <!-- First launch only: the welcome arrives as a gift. The box drops in and shakes, the bow
-           springs loose, the lid flies off and the card rises out of it. -->
-      <svg id="gift" viewBox="0 0 140 150" aria-hidden="true">
-        <g class="gift-base">
-          <rect x="14" y="62" width="112" height="80" rx="4" class="gift-box" />
-          <rect x="62" y="62" width="16" height="80" class="gift-ribbon" />
-        </g>
-        <g class="gift-lid">
-          <rect x="6" y="44" width="128" height="22" rx="4" class="gift-box" />
-          <rect x="62" y="44" width="16" height="22" class="gift-ribbon" />
-          <g class="gift-bow">
-            <path class="gift-ribbon" d="M70 44 C58 22 36 24 42 38 C46 46 60 46 70 44 Z" />
-            <path class="gift-ribbon" d="M70 44 C82 22 104 24 98 38 C94 46 80 46 70 44 Z" />
-            <rect x="64" y="38" width="12" height="9" rx="3" class="gift-knot" />
-          </g>
-        </g>
-      </svg>
       <div class="welcome-card">
+        <!-- The welcome is a gift: an open box at the top of the card, its lid propped on the back
+             corner. On first launch it drops in closed, shakes, and pops open, and the card fills in
+             around it. Drawn open; the closed state is only the start of the animation. -->
+        <svg id="gift" viewBox="-30 -34 200 180" aria-hidden="true">
+          <g class="gift-all">
+            <g class="gift-burst">
+              <path d="M70 50 V22 M52 54 L38 32 M88 54 L102 32 M40 60 L18 50 M100 60 L122 50" />
+            </g>
+            <g class="gift-base">
+              <rect x="14" y="62" width="112" height="80" rx="4" class="gift-box" />
+              <rect x="62" y="62" width="16" height="80" class="gift-ribbon" />
+              <rect x="17" y="63" width="106" height="6" rx="2" class="gift-inside" />
+            </g>
+            <g class="gift-lid">
+              <rect x="6" y="44" width="128" height="22" rx="4" class="gift-box" />
+              <rect x="62" y="44" width="16" height="22" class="gift-ribbon" />
+              <g class="gift-bow">
+                <path class="gift-ribbon" d="M70 44 C58 22 36 24 42 38 C46 46 60 46 70 44 Z" />
+                <path class="gift-ribbon" d="M70 44 C82 22 104 24 98 38 C94 46 80 46 70 44 Z" />
+                <rect x="64" y="38" width="12" height="9" rx="3" class="gift-knot" />
+              </g>
+            </g>
+          </g>
+        </svg>
         <h1>Orimono</h1>
         <p>A drum machine made of threads.<br />Press Play, then draw beats on threads.</p>
         <button id="welcome-play" class="primary" disabled>Play</button>
