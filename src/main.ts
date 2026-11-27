@@ -17,7 +17,7 @@ import { packFabric, unpackFabric } from './link';
 import { hitsOf, midi, wav, type Part } from './export';
 import { MAX_FABRICS, FILE_EXT, fileName, projectData, projectFile, readFile, readProject, type Project, type Stored } from './project';
 import { STYLES, randomFillStyled } from './random';
-import { Renderer, type ViewState } from './render';
+import { Renderer, FLIGHT_STYLES, type FlightStyle, type ViewState } from './render';
 import { Scheduler } from './scheduler';
 
 const STORE_KEY = 'orimono.pattern.v1';
@@ -307,6 +307,7 @@ function closeWelcome(fly: boolean) {
   localStorage.setItem(WELCOME_KEY, '1');
   const el = $('welcome'), big = $('welcome-play'), real = $('play');
   const done = () => { el.hidden = true; document.body.classList.remove('welcoming'); };
+  renderer.land(); // strings left in the box (or on their way) are back at their places
   document.body.classList.remove('intro'); // its animations would hold the card in view
   if (!fly || still()) return done();
   const a = big.getBoundingClientRect(), b = real.getBoundingClientRect();
@@ -319,18 +320,34 @@ function closeWelcome(fly: boolean) {
   const from = `translate(${a.left + a.width / 2 - b.left - b.width / 2}px, ${a.top + a.height / 2 - b.top - b.height / 2}px) scale(${a.height / b.height})`;
   void flying.animate([{ transform: from }, { transform: 'none' }], { duration: 650, easing: 'cubic-bezier(.65,0,.35,1)' }).finished.then(() => { flying.remove(); done(); });
 }
+/** The gift box's open top, in the canvas's own px: where the strings fly out from and back into. */
+function giftMouth() {
+  const m = document.querySelector('.gift-inside')?.getBoundingClientRect(), c = canvas.getBoundingClientRect();
+  return m && m.width ? { x: m.left + m.width / 2 - c.left, y: m.top + m.height / 2 - c.top } : null;
+}
+// Trying out how the strings come out of the box: orimonoWelcome('warp') etc. remembers the choice.
+const FLIGHT_KEY = 'orimono.flight';
+const triedFlight = localStorage.getItem(FLIGHT_KEY) as FlightStyle | null;
+if (triedFlight && FLIGHT_STYLES.includes(triedFlight)) renderer.flightStyle = triedFlight;
 if (welcoming) {
   // First launch: the gift box drops in and pops open, the strings fly out of it to their
   // places, the rest of the machine comes out around them, and the card fills in around the box.
   if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
     document.body.classList.add('intro');
-    // The strings fly out of the box's open top.
-    renderer.bloom(() => {
-      const m = document.querySelector('.gift-inside')?.getBoundingClientRect(), c = canvas.getBoundingClientRect();
-      return m && m.width ? { x: m.left + m.width / 2 - c.left, y: m.top + m.height / 2 - c.top } : null;
-    });
+    renderer.bloom(giftMouth);
     window.setTimeout(() => document.body.classList.remove('intro'), 6900);
   }
+  // The box can be closed and opened again, just to play: closing draws the strings back in,
+  // opening sends them out again. (Not during the first-launch show.)
+  const gift = $('gift');
+  gift.addEventListener('click', () => {
+    if (document.body.classList.contains('intro')) return;
+    const shut = gift.classList.toggle('shut');
+    gift.classList.remove('popping');
+    void gift.getBoundingClientRect(); // restart the pop
+    if (!shut) gift.classList.add('popping');
+    renderer.fly(!shut, giftMouth, shut ? 0 : 200);
+  });
   document.body.classList.add('welcoming');
   $('welcome').hidden = false;
   $('welcome-play').onclick = togglePlay;
@@ -2245,9 +2262,16 @@ if (import.meta.env.DEV) Object.assign(window, { __rg: { engine, scheduler, get 
 // For tracking down sound trouble: type orimonoSound() in the browser console.
 Object.assign(window, {
   // To see the first launch again (the bloom and the welcome): type orimonoWelcome() in the console.
+  // orimonoWelcome('fling' | 'warp' | 'fountain' | 'spring') shows it with the strings coming out
+  // of the gift box that way (remembered until another is picked).
   // For trying accent colours: orimonoAccent() opens a small picker; orimonoAccent('#8bc0bc') sets one directly.
   orimonoAccent: (hex?: string) => { if (hex) setAccent(hex); else openPicker(); },
-  orimonoWelcome: () => { localStorage.removeItem(WELCOME_KEY); location.reload(); },
+  orimonoWelcome: (style?: FlightStyle) => {
+    if (style && !FLIGHT_STYLES.includes(style)) return `Pick one of: ${FLIGHT_STYLES.join(', ')}`;
+    if (style) localStorage.setItem(FLIGHT_KEY, style);
+    localStorage.removeItem(WELCOME_KEY);
+    location.reload();
+  },
   orimonoSound: () => ({
     audio: engine.ctx.state, clock: engine.ctx.currentTime, sampleRate: engine.ctx.sampleRate, soundsLoaded: engine.loaded,
     ...engine.info(), playing: scheduler.playing, tempo: scheduler.bpm?.(), fabrics: items.length,

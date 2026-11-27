@@ -38,6 +38,9 @@ interface Wobble { amp: number; t0: number; freq: number; tau: number }
 const FONT = '"Space Grotesk", system-ui, sans-serif';
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+export type FlightStyle = 'fling' | 'warp' | 'fountain' | 'spring';
+export const FLIGHT_STYLES: FlightStyle[] = ['fling', 'warp', 'fountain', 'spring'];
+
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private xNow = new Map<number, number>(); // animated x per thread id
@@ -51,20 +54,67 @@ export class Renderer {
   }
 
   // First launch: the strings come out of the welcome's gift box. Once its lid pops, they fly
-  // out of it, middle ones first, each stretching to its place and swinging as it lands. Then
-  // the row tags pop down the left edge and the groups and numbers count in along the bottom.
+  // out of it, middle ones first, each landing on its place and swinging. Then the row tags pop
+  // down the left edge and the groups and numbers count in along the bottom. While the welcome
+  // is up, closing the box draws the strings back in, and opening it sends them out again.
   private bloomAt: number | null = null; // when it began (-1: at the next frame)
   private bloomT = 0; // ms since then
-  private bloomed = new Set<number>();
-  private bloomFrom: () => { x: number; y: number } | null = () => null;
-  /** from: where the strings fly out from, in the canvas's own px (the box's open top). */
-  bloom(from: () => { x: number; y: number } | null) { this.bloomAt = -1; this.bloomed.clear(); this.bloomFrom = from; }
-  private static FLY = 1850; private static SPREAD = 700; private static FLIGHT = 750; // ms: first launch; first to last; one flight
+  private nowMs = 0;
+  /** How the strings travel out of the box (orimonoWelcome('warp') etc. to try one). */
+  flightStyle: FlightStyle = 'fling';
+  private flyAt: number | null = null; // when the current flight (out or in) began
+  private flyOut = true;
+  private stowed = false; // all the strings are in the box
+  private landed = new Set<number>();
+  private flyFrom: () => { x: number; y: number } | null = () => null;
+  private static FLY = 1850; // ms after the bloom begins: the lid has popped
 
-  /** How far string i of n is through its flight out of the box (0: still inside; 1: landed). */
+  /** from: where the strings fly out from, in the canvas's own px (the box's open top). */
+  bloom(from: () => { x: number; y: number } | null) {
+    this.bloomAt = -1;
+    this.fly(true, from, Renderer.FLY);
+  }
+
+  /** Send the strings out of the box (out) or back into it, starting delay ms from now. */
+  fly(out: boolean, from: () => { x: number; y: number } | null, delay = 0) {
+    this.flyFrom = from;
+    this.landed.clear();
+    if (this.frozen || reducedMotion()) { this.flyAt = null; this.stowed = !out; return; }
+    this.flyAt = performance.now() + delay;
+    this.flyOut = out;
+    this.stowed = false;
+  }
+
+  /** Every string at its place, now. */
+  land() { this.flyAt = null; this.stowed = false; }
+
+  private spread() { return this.flyOut ? 700 : 450; }
+  private flightMs() { return this.flyOut ? (this.flightStyle === 'warp' ? 1000 : 750) : 500; }
+
+  /** Where string i of n is between the box (0) and its place (1). Out: middle strings first;
+      in: outer strings first. */
   private flight(i: number, n: number) {
-    const mid = (n - 1) / 2, rank = mid > 0 ? Math.abs(i - mid) / mid : 0;
-    return Math.max(0, Math.min(1, (this.bloomT - Renderer.FLY - rank * Renderer.SPREAD) / Renderer.FLIGHT));
+    if (this.flyAt === null) return this.stowed ? 0 : 1;
+    const mid = (n - 1) / 2, edge = mid > 0 ? Math.abs(i - mid) / mid : 0;
+    const rank = this.flyOut ? edge : 1 - edge;
+    const g = Math.max(0, Math.min(1, (this.nowMs - this.flyAt - rank * this.spread()) / this.flightMs()));
+    return this.flyOut ? g : 1 - g;
+  }
+
+  /** Check the flight each frame: swing strings as they land, and finish when all are done. */
+  private stepFlight(p: Pattern) {
+    if (this.flyAt === null) return;
+    const n = p.threads.length;
+    p.threads.forEach((th, i) => {
+      if (this.flyOut && this.flight(i, n) >= 1 && !this.landed.has(th.id)) {
+        this.landed.add(th.id);
+        this.pluck(th.id, this.flightStyle === 'warp' ? 4 : 6, 0.35, 5);
+      }
+    });
+    if (this.nowMs - this.flyAt > this.spread() + this.flightMs() + 50) {
+      this.stowed = !this.flyOut;
+      this.flyAt = null;
+    }
   }
 
   /** How big row tag ri is drawn while the tags pop in (0: not yet; a little over 1 on the way). */
@@ -86,37 +136,73 @@ export class Renderer {
     const counted = Math.floor(Math.max(0, Math.min(1, (t - STRIP) / STRIP_MS)) * n);
     if (t >= STRIP) ctx.rect(0, stripY, counted >= n ? L.width : edge(counted + 1), L.height - stripY);
     // Strings: each column shows once its string has landed (in flight, drawFlying draws it).
-    p.threads.forEach((th, i) => {
-      if (this.flight(i, n) < 1) return;
-      ctx.rect(edge(i), 0, edge(i + 1) - edge(i), stripY);
-      if (!this.bloomed.has(th.id)) { this.bloomed.add(th.id); this.pluck(th.id, 6, 0.35, 5); }
-    });
+    p.threads.forEach((_, i) => { if (this.flight(i, n) >= 1) ctx.rect(edge(i), 0, edge(i + 1) - edge(i), stripY); });
     ctx.clip();
-    return t > Math.max(STRIP + STRIP_MS, Renderer.FLY + Renderer.SPREAD + Renderer.FLIGHT) + 200;
+    return t > STRIP + STRIP_MS + 200 && this.flyAt === null;
   }
 
-  /** The strings still in flight from the box: each a thread flung out, its top end leading in
-      an arc and its bottom end trailing, bent while it travels and straight as it lands. */
+  /** The strings on their way between the box and their places, in the chosen style:
+      fling  - flung out in an arc, top end leading, bent while flying, straight as it lands;
+      warp   - pulled up out of the box, carried along the top to its place, then pegged down,
+               like warping a loom;
+      fountain - shot up like a drop to the top of its place, then unrolled down like a rope;
+      spring - jumps out coiled and uncoils on the way. */
   private drawFlying(p: Pattern, L: Layout, xs: number[], top: number, bottom: number, colourOf: (ti: number) => string) {
-    const o = this.bloomFrom() ?? { x: L.width / 2, y: L.height / 2 };
+    if (this.flyAt === null) return;
+    const o = this.flyFrom() ?? { x: L.width / 2, y: L.height / 2 };
     const { ctx } = this, n = xs.length;
+    const clamp = (v: number) => Math.max(0, Math.min(1, v));
+    const ease = (v: number) => 1 - Math.pow(1 - clamp(v), 3);
+    const inOut = (v: number) => { v = clamp(v); return v < 0.5 ? 4 * v * v * v : 1 - Math.pow(-2 * v + 2, 3) / 2; };
     ctx.lineWidth = L.colW >= 22 ? 2 : 1.5;
     ctx.lineCap = 'round';
     p.threads.forEach((_, i) => {
       const g = this.flight(i, n);
       if (g <= 0 || g >= 1) return;
-      const ease = (v: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, v)), 3);
-      const a = ease(g * 1.15), b = ease(g * 1.15 - 0.15); // the top leads, the bottom trails
       const X = xs[i];
-      const lift = Math.min(160, L.height * 0.25) * Math.sin(Math.PI * a); // up out of the box, then down onto its place
-      const tx = o.x + (X - o.x) * a, ty = Math.max(top, o.y + (top - o.y) * a - lift); // never above the grid's top
-      const bx = o.x + (X - o.x) * b, by = o.y + (bottom - o.y) * b;
-      const side = X < o.x ? -1 : 1, bend = 60 * (1 - g) * side; // whips outward while it flies
       ctx.globalAlpha = Math.min(1, g * 6) * 0.85;
       ctx.strokeStyle = colourOf(i);
       ctx.beginPath();
-      ctx.moveTo(tx, ty);
-      ctx.quadraticCurveTo((tx + bx) / 2 + bend, (ty + by) / 2, bx, by);
+      if (this.flightStyle === 'warp') {
+        const up = inOut(g / 0.35), across = inOut((g - 0.35) / 0.35), down = ease((g - 0.7) / 0.3);
+        const tx = o.x + (X - o.x) * across, ty = o.y + (top - o.y) * up;
+        const bx = o.x + (X - o.x) * down, by = o.y + (bottom - o.y) * down;
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(bx, by);
+      } else if (this.flightStyle === 'fountain') {
+        const q = g / 0.55, hop = Math.min(220, L.height * 0.35);
+        const at = (v: number) => {
+          v = clamp(v);
+          return { x: o.x + (X - o.x) * v, y: o.y + (top - o.y) * v - hop * 4 * v * (1 - v) };
+        };
+        if (q < 1) { // a drop on its arc, with a short tail
+          const h = at(q), t = at(q - 0.12);
+          ctx.moveTo(t.x, Math.max(top, t.y));
+          ctx.lineTo(h.x, Math.max(top, h.y));
+        } else { // unrolling down from the top, its loose end swaying
+          const d = ease((g - 0.55) / 0.45), end = top + (bottom - top) * d, sway = 14 * (1 - d) * Math.sin(g * 30);
+          ctx.moveTo(X, top);
+          ctx.quadraticCurveTo(X, (top + end) / 2, X + sway, end);
+        }
+      } else if (this.flightStyle === 'spring') {
+        const a = ease(g), b = ease(g - 0.12);
+        const tx = o.x + (X - o.x) * a, ty = o.y + (top - o.y) * a;
+        const bx = o.x + (X - o.x) * b, by = o.y + (bottom - o.y) * b;
+        const amp = 16 * Math.pow(1 - g, 1.5), turns = 9, steps = 60;
+        for (let k = 0; k <= steps; k++) {
+          const u = k / steps, wob = amp * Math.sin(2 * Math.PI * turns * u + g * 25) * Math.sin(Math.PI * u);
+          const x = tx + (bx - tx) * u + wob, y = ty + (by - ty) * u;
+          if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+      } else { // fling
+        const a = ease(g * 1.15), b = ease(g * 1.15 - 0.15); // the top leads, the bottom trails
+        const lift = Math.min(160, L.height * 0.25) * Math.sin(Math.PI * a); // up out of the box, then down onto its place
+        const tx = o.x + (X - o.x) * a, ty = Math.max(top, o.y + (top - o.y) * a - lift); // never above the grid's top
+        const bx = o.x + (X - o.x) * b, by = o.y + (bottom - o.y) * b;
+        const side = X < o.x ? -1 : 1, bend = 60 * (1 - g) * side; // whips outward while it flies
+        ctx.moveTo(tx, ty);
+        ctx.quadraticCurveTo((tx + bx) / 2 + bend, (ty + by) / 2, bx, by);
+      }
       ctx.stroke();
     });
     ctx.globalAlpha = 1;
@@ -167,6 +253,8 @@ export class Renderer {
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const nowMs = performance.now();
+    this.nowMs = nowMs;
+    this.stepFlight(p);
     const dt = Math.min(0.1, (nowMs - this.last) / 1000);
     this.last = nowMs;
     const now = nowMs / 1000;
@@ -248,6 +336,7 @@ export class Renderer {
     // After a Random press, the user's own notes (which Random kept) glow and fade out.
     const glow = Math.max(0, 1 - (nowMs - s.glow) / 900);
     p.threads.forEach((t, ti) => {
+      if (this.flight(ti, p.threads.length) < 1) return; // in the box, or on its way (drawFlying)
       const colour = colourOf(ti);
       const a = this.alpha.get(t.id) ?? 1;
       const hold = s.hold && s.hold.threadId === t.id && s.hold.slot === 0 ? s.hold : null;
@@ -461,10 +550,8 @@ export class Renderer {
       ctx.fillRect(0, L.numTop - 2, L.width, L.height - L.numTop + 2);
     }
     this.drawStrip(p, L, s, xs);
-    if (blooming) {
-      ctx.restore();
-      this.drawFlying(p, L, xs, y0, y0 + span, colourOf);
-    }
+    if (blooming) ctx.restore();
+    this.drawFlying(p, L, xs, y0, y0 + span, colourOf);
   }
 
   private drawStrip(p: Pattern, L: Layout, s: ViewState, xs: number[]) {
