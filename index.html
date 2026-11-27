@@ -117,6 +117,23 @@
       <form method="dialog"><button value="no">No</button><button id="ask-yes" value="yes" class="danger">Yes</button></form>
     </dialog>
     <div id="welcome" hidden>
+      <!-- First launch only: the welcome arrives as a gift. The box drops in and shakes, the bow
+           springs loose, the lid flies off and the card rises out of it. -->
+      <svg id="gift" viewBox="0 0 140 150" aria-hidden="true">
+        <g class="gift-base">
+          <rect x="14" y="62" width="112" height="80" rx="4" class="gift-box" />
+          <rect x="62" y="62" width="16" height="80" class="gift-ribbon" />
+        </g>
+        <g class="gift-lid">
+          <rect x="6" y="44" width="128" height="22" rx="4" class="gift-box" />
+          <rect x="62" y="44" width="16" height="22" class="gift-ribbon" />
+          <g class="gift-bow">
+            <path class="gift-ribbon" d="M70 44 C58 22 36 24 42 38 C46 46 60 46 70 44 Z" />
+            <path class="gift-ribbon" d="M70 44 C82 22 104 24 98 38 C94 46 80 46 70 44 Z" />
+            <rect x="64" y="38" width="12" height="9" rx="3" class="gift-knot" />
+          </g>
+        </g>
+      </svg>
       <div class="welcome-card">
         <h1>Orimono</h1>
         <p>A drum machine made of threads.<br />Press Play, then draw beats on threads.</p>

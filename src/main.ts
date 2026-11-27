@@ -325,7 +325,7 @@ if (welcoming) {
   if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
     document.body.classList.add('intro');
     renderer.bloom();
-    window.setTimeout(() => document.body.classList.remove('intro'), 6600);
+    window.setTimeout(() => document.body.classList.remove('intro'), 8500);
   }
   document.body.classList.add('welcoming');
   $('welcome').hidden = false;
