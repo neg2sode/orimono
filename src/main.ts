@@ -325,7 +325,7 @@ function giftMouth() {
   const m = document.querySelector('.gift-inside')?.getBoundingClientRect(), c = canvas.getBoundingClientRect();
   return m && m.width ? { x: m.left + m.width / 2 - c.left, y: m.top + m.height / 2 - c.top } : null;
 }
-// Trying out how the strings come out of the box: orimonoWelcome('warp') etc. remembers the choice.
+// Trying out how the strings come out of the box: orimonoWelcome('thread') etc. remembers the choice.
 const FLIGHT_KEY = 'orimono.flight';
 const triedFlight = localStorage.getItem(FLIGHT_KEY) as FlightStyle | null;
 if (triedFlight && FLIGHT_STYLES.includes(triedFlight)) renderer.flightStyle = triedFlight;
