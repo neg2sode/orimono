@@ -38,8 +38,10 @@ interface Wobble { amp: number; t0: number; freq: number; tau: number }
 const FONT = '"Space Grotesk", system-ui, sans-serif';
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export type FlightStyle = 'fling' | 'warp' | 'fountain' | 'spring';
-export const FLIGHT_STYLES: FlightStyle[] = ['fling', 'warp', 'fountain', 'spring'];
+export type FlightStyle = 'fling' | 'warp' | 'fountain' | 'spring' | 'thread' | 'grow' | 'pendulum' | 'cast';
+export const FLIGHT_STYLES: FlightStyle[] = ['fling', 'warp', 'fountain', 'spring', 'thread', 'grow', 'pendulum', 'cast'];
+// How long one string's way out takes, in ms.
+const FLIGHT_MS: Record<FlightStyle, number> = { fling: 750, warp: 1000, fountain: 750, spring: 750, thread: 1000, grow: 1100, pendulum: 1300, cast: 1000 };
 
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
@@ -89,7 +91,7 @@ export class Renderer {
   land() { this.flyAt = null; this.stowed = false; }
 
   private spread() { return this.flyOut ? 700 : 450; }
-  private flightMs() { return this.flyOut ? (this.flightStyle === 'warp' ? 1000 : 750) : 500; }
+  private flightMs() { return this.flyOut ? FLIGHT_MS[this.flightStyle] : 500; }
 
   /** Where string i of n is between the box (0) and its place (1). Out: middle strings first;
       in: outer strings first. */
@@ -146,7 +148,16 @@ export class Renderer {
       warp   - pulled up out of the box, carried along the top to its place, then pegged down,
                like warping a loom;
       fountain - shot up like a drop to the top of its place, then unrolled down like a rope;
-      spring - jumps out coiled and uncoils on the way. */
+      spring - jumps out coiled and uncoils on the way.
+    These four come out of the box's open top for real: what is not out yet is still inside.
+      thread - one string's length slides out of the box, up and over to the top of its place,
+               and down it, like a thread pulled through the eye of a needle;
+      grow   - grows out of the box like a vine, up, over and down its place; then its tail
+               leaves the box and the slack is pulled straight;
+      pendulum - rises straight up out of the box, its top is carried along to its place, then
+               the rest slips out and it swings down from the top and settles;
+      cast   - its end is cast to the top of its place like a fishing line, the line still
+               running out of the box; then the rest comes out and swings down. */
   private drawFlying(p: Pattern, L: Layout, xs: number[], top: number, bottom: number, colourOf: (ti: number) => string) {
     if (this.flyAt === null) return;
     const o = this.flyFrom() ?? { x: L.width / 2, y: L.height / 2 };
@@ -194,6 +205,37 @@ export class Renderer {
           const x = tx + (bx - tx) * u + wob, y = ty + (by - ty) * u;
           if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
+      } else if (this.flightStyle === 'thread' || this.flightStyle === 'grow') {
+        // The way: out of the box, up and over to the top of its place, then down it.
+        const way = this.threadWay(o, X, top, bottom), total = way.len[way.len.length - 1], L = bottom - top, bend = total - L;
+        let head: number, tail: number;
+        if (this.flightStyle === 'thread') { head = inOut(g) * total; tail = head - L; }
+        else { head = ease(g / 0.7) * total; tail = g < 0.7 ? 0 : inOut((g - 0.7) / 0.3) * bend; }
+        this.tracePart(way, Math.max(0, tail), head);
+      } else if (this.flightStyle === 'pendulum' || this.flightStyle === 'cast') {
+        const L = bottom - top, swingAt = this.flightStyle === 'pendulum' ? 0.5 : 0.45;
+        if (g < swingAt) { // still running out of the box: a line from its open top to the end
+          let ex: number, ey: number;
+          if (this.flightStyle === 'pendulum') {
+            const up = inOut(g / 0.25), across = inOut((g - 0.25) / 0.25);
+            ex = o.x + (X - o.x) * across; ey = o.y + (top - o.y) * up;
+            ctx.moveTo(o.x, o.y);
+            ctx.lineTo(ex, ey);
+          } else {
+            const a = ease(g / swingAt), lift = Math.min(140, L * 0.3) * Math.sin(Math.PI * a);
+            ex = o.x + (X - o.x) * a; ey = Math.max(top, o.y + (top - o.y) * a - lift);
+            const sag = 40 * (1 - a); // the line sags while the end is still flying
+            ctx.moveTo(o.x, o.y);
+            ctx.quadraticCurveTo((o.x + ex) / 2, (o.y + ey) / 2 + sag, ex, ey);
+          }
+        } else { // out: hanging from the top of its place, swinging down and settling
+          const t = (g - swingAt) / (1 - swingAt);
+          const a0 = Math.atan2(o.x - X, Math.max(1, o.y - top)); // it starts pointing back at the box
+          const ang = a0 * Math.exp(-3.2 * t) * Math.cos(2 * Math.PI * 1.6 * t);
+          const d0 = Math.hypot(o.x - X, o.y - top), len = d0 + (L - d0) * ease(t / 0.35); // the rest slips out of the box as it goes
+          ctx.moveTo(X, top);
+          ctx.lineTo(X + len * Math.sin(ang), top + len * Math.cos(ang));
+        }
       } else { // fling
         const a = ease(g * 1.15), b = ease(g * 1.15 - 0.15); // the top leads, the bottom trails
         const lift = Math.min(160, L.height * 0.25) * Math.sin(Math.PI * a); // up out of the box, then down onto its place
@@ -206,6 +248,38 @@ export class Renderer {
       ctx.stroke();
     });
     ctx.globalAlpha = 1;
+  }
+
+  /** The way a thread takes out of the box (o) to its place: up and over in a curve to the
+      top of its place, then straight down it. As points with their distance along the way. */
+  private threadWay(o: { x: number; y: number }, X: number, top: number, bottom: number) {
+    const pts: { x: number; y: number }[] = [], len: number[] = [];
+    const c1 = { x: o.x, y: o.y - 0.7 * (o.y - top) }, c2 = { x: X, y: top - 0.15 * Math.max(0, o.y - top) };
+    const N = 40;
+    for (let k = 0; k <= N; k++) {
+      const t = k / N, u = 1 - t;
+      pts.push({ x: u * u * u * o.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * X,
+        y: Math.max(top, u * u * u * o.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * top) });
+    }
+    pts.push({ x: X, y: bottom });
+    pts.forEach((q, k) => len.push(k ? len[k - 1] + Math.hypot(q.x - pts[k - 1].x, q.y - pts[k - 1].y) : 0));
+    return { pts, len };
+  }
+
+  /** Add the part of a way between distances from and to to the current path. */
+  private tracePart(way: { pts: { x: number; y: number }[]; len: number[] }, from: number, to: number) {
+    const { pts, len } = way, ctx = this.ctx;
+    const at = (d: number) => {
+      let k = 1;
+      while (k < len.length - 1 && len[k] < d) k++;
+      const f = len[k] === len[k - 1] ? 0 : (d - len[k - 1]) / (len[k] - len[k - 1]);
+      return { x: pts[k - 1].x + (pts[k].x - pts[k - 1].x) * f, y: pts[k - 1].y + (pts[k].y - pts[k - 1].y) * f, k };
+    };
+    if (to <= from) return;
+    const a = at(from), b = at(to);
+    ctx.moveTo(a.x, a.y);
+    for (let k = a.k; k < b.k; k++) ctx.lineTo(pts[k].x, pts[k].y);
+    ctx.lineTo(b.x, b.y);
   }
 
   /** Forget every string's place and swing: a different fabric is about to be drawn. */

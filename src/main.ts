@@ -2262,8 +2262,8 @@ if (import.meta.env.DEV) Object.assign(window, { __rg: { engine, scheduler, get 
 // For tracking down sound trouble: type orimonoSound() in the browser console.
 Object.assign(window, {
   // To see the first launch again (the bloom and the welcome): type orimonoWelcome() in the console.
-  // orimonoWelcome('fling' | 'warp' | 'fountain' | 'spring') shows it with the strings coming out
-  // of the gift box that way (remembered until another is picked).
+  // orimonoWelcome('fling') shows it with the strings coming out of the gift box that way
+  // (remembered until another is picked); the ways are listed in render.ts, FLIGHT_STYLES.
   // For trying accent colours: orimonoAccent() opens a small picker; orimonoAccent('#8bc0bc') sets one directly.
   orimonoAccent: (hex?: string) => { if (hex) setAccent(hex); else openPicker(); },
   orimonoWelcome: (style?: FlightStyle) => {
