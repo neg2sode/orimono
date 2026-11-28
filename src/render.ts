@@ -38,15 +38,6 @@ interface Wobble { amp: number; t0: number; freq: number; tau: number }
 const FONT = '"Space Grotesk", system-ui, sans-serif';
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export type FlightStyle = 'fling' | 'fountain' | 'thread';
-export const FLIGHT_STYLES: FlightStyle[] = ['fling', 'fountain', 'thread'];
-// How long one string's way out takes, and the time from the first string out to the last, in ms.
-const FLIGHT_MS: Record<FlightStyle, number> = { fling: 750, fountain: 750, thread: 850 };
-const SPREAD_MS: Record<FlightStyle, number> = { fling: 700, fountain: 700, thread: 220 }; // thread: a burst, nearly all at once
-
-/** A piece of confetti: a bead like those on the strings, or a fleck of paper that flips as it falls. */
-type Confetti = { x: number; y: number; vx: number; vy: number; rot: number; spin: number; size: number; bead: boolean; colour: string; delay: number; life: number; age: number };
-
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private xNow = new Map<number, number>(); // animated x per thread id
@@ -59,122 +50,64 @@ export class Renderer {
     this.ctx = canvas.getContext('2d')!;
   }
 
-  // First launch: the strings come out of the welcome's gift box. Once its lid pops, they fly
-  // out of it, middle ones first, each landing on its place and swinging. Then the row tags pop
-  // down the left edge and the groups and numbers count in along the bottom. While the welcome
-  // is up, closing the box draws the strings back in, and opening it sends them out again.
+  // First launch: the strings come out of the welcome's gift box. When its lid pops they burst
+  // out of it nearly all at once, each shooting up and over to the top of its place and down
+  // it, then slowly settling and swinging as it lands. Then the row tags pop down the left edge
+  // and the groups and numbers count in along the bottom. Going out is one way: closing the box
+  // leaves the strings where they are.
   private bloomAt: number | null = null; // when it began (-1: at the next frame)
   private bloomT = 0; // ms since then
   private nowMs = 0;
-  /** How the strings travel out of the box (orimonoWelcome('thread') etc. to try one). */
-  flightStyle: FlightStyle = 'fling';
-  private flyAt: number | null = null; // when the current flight (out or in) began
-  private flyOut = true;
-  private stowed = false; // all the strings are in the box
+  private flyAt: number | null = null; // when the strings set off
   private landed = new Set<number>();
   private flyFrom: () => { x: number; y: number } | null = () => null;
   private static FLY = 1850; // ms after the bloom begins: the lid has popped
+  private static SPREAD = 220; // first string out to the last: a burst, nearly all at once
+  private static FLIGHT = 1700; // one string's way: most of it in a flash, then a slow settle
+  /** Called as the strings burst out (main.ts sends confetti). */
+  onBurst: (() => void) | null = null;
+  private burstDue = false;
+  private pattern: Pattern | null = null;
 
-  /** from: where the strings fly out from, in the canvas's own px (the box's open top). */
+  /** from: where the strings come out, in the canvas's own px (the box's open top). */
   bloom(from: () => { x: number; y: number } | null) {
     this.bloomAt = -1;
-    this.fly(true, from, Renderer.FLY);
-  }
-
-  /** Send the strings out of the box (out) or back into it, starting delay ms from now. */
-  fly(out: boolean, from: () => { x: number; y: number } | null, delay = 0) {
     this.flyFrom = from;
     this.landed.clear();
-    if (this.frozen || reducedMotion()) { this.flyAt = null; this.stowed = !out; return; }
-    this.flyAt = performance.now() + delay;
-    this.flyOut = out;
-    this.stowed = false;
-    this.confettiDue = out && this.flightStyle === 'thread';
-  }
-
-  // The surprise when the strings burst out of the box (thread): confetti in the strings' own
-  // colours and the accent, shot up out of the box, fluttering down and fading.
-  private confettiDue = false;
-  private confetti: Confetti[] = [];
-  private burst(p: Pattern) {
-    const o = this.flyFrom();
-    if (!o) return;
-    const colours: string[] = [...new Set(Object.values(p.groups).map((g) => PALETTE[g.colour].hex))];
-    colours.push(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#875946');
-    const H = this.canvas.clientHeight || 800, power = Math.max(0.6, Math.min(1.3, H / 800));
-    for (let k = 0; k < 110; k++) {
-      const ang = (Math.random() - 0.5) * 2.2, speed = (420 + Math.random() * 700) * power; // a cone, mostly upward
-      this.confetti.push({
-        x: o.x + (Math.random() - 0.5) * 30, y: o.y, vx: Math.sin(ang) * speed, vy: -Math.cos(ang) * speed,
-        rot: Math.random() * Math.PI * 2, spin: (Math.random() - 0.5) * 18, size: 3 + Math.random() * 4,
-        bead: Math.random() < 0.35, colour: colours[k % colours.length], delay: Math.random() * 0.15, life: 1.8 + Math.random() * 1.1, age: 0,
-      });
-    }
-  }
-  private drawConfetti(dt: number) {
-    if (!this.confetti.length) return;
-    const { ctx } = this;
-    this.confetti = this.confetti.filter((c) => c.age < c.delay + c.life);
-    for (const c of this.confetti) {
-      c.age += dt;
-      if (c.age < c.delay) continue;
-      // Thrown up, slowed by the air; flecks of paper drift down slowly, beads fall faster.
-      c.vy += 1500 * dt;
-      const drag = Math.exp(-(c.bead ? 1.2 : 2.6) * dt);
-      c.vx *= drag;
-      c.vy = Math.min(c.vy * drag, c.bead ? 520 : 170);
-      c.x += (c.vx + (c.bead ? 0 : 30 * Math.sin(c.age * 7 + c.rot))) * dt;
-      c.y += c.vy * dt;
-      c.rot += c.spin * dt;
-      const left = c.delay + c.life - c.age;
-      ctx.globalAlpha = Math.min(1, left / 0.5) * 0.95;
-      ctx.fillStyle = c.colour;
-      ctx.beginPath();
-      if (c.bead) ctx.arc(c.x, c.y, c.size * 0.6, 0, Math.PI * 2);
-      else {
-        ctx.save();
-        ctx.translate(c.x, c.y);
-        ctx.rotate(c.rot);
-        ctx.scale(1, Math.cos(c.age * 9 + c.rot)); // flipping over as it falls
-        ctx.rect(-c.size, -c.size * 0.45, c.size * 2, c.size * 0.9);
-        ctx.restore();
-      }
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+    if (this.frozen || reducedMotion()) return;
+    this.flyAt = performance.now() + Renderer.FLY;
+    this.burstDue = true;
   }
 
   /** Every string at its place, now. */
-  land() { this.flyAt = null; this.stowed = false; }
+  land() { this.flyAt = null; }
 
-  private spread() { return this.flyOut ? SPREAD_MS[this.flightStyle] : 450; }
-  private flightMs() { return this.flyOut ? FLIGHT_MS[this.flightStyle] : 500; }
-
-  /** Where string i of n is between the box (0) and its place (1). Out: middle strings first;
-      in: outer strings first. */
-  private flight(i: number, n: number) {
-    if (this.flyAt === null) return this.stowed ? 0 : 1;
-    const mid = (n - 1) / 2, edge = mid > 0 ? Math.abs(i - mid) / mid : 0;
-    const rank = this.flyOut ? edge : 1 - edge;
-    const g = Math.max(0, Math.min(1, (this.nowMs - this.flyAt - rank * this.spread()) / this.flightMs()));
-    return this.flyOut ? g : 1 - g;
+  /** The colours of the open fabric's groups (for the confetti). */
+  colours(): string[] {
+    const p = this.pattern;
+    return p ? [...new Set(Object.values(p.groups).map((g) => PALETTE[g.colour].hex))] : [];
   }
 
-  /** Check the flight each frame: swing strings as they land, and finish when all are done. */
+  /** How far string i of n is on its way out of the box (0: inside; 1: at its place). Middle
+      strings first. */
+  private flight(i: number, n: number) {
+    if (this.flyAt === null) return 1;
+    const mid = (n - 1) / 2, edge = mid > 0 ? Math.abs(i - mid) / mid : 0;
+    return Math.max(0, Math.min(1, (this.nowMs - this.flyAt - edge * Renderer.SPREAD) / Renderer.FLIGHT));
+  }
+
+  /** Check the flight each frame: the burst, swinging strings as they land, and the end. */
   private stepFlight(p: Pattern) {
     if (this.flyAt === null) return;
+    if (this.burstDue && this.nowMs >= this.flyAt) { this.burstDue = false; this.onBurst?.(); }
     const n = p.threads.length;
-    if (this.confettiDue && this.nowMs >= this.flyAt) { this.confettiDue = false; this.burst(p); }
     p.threads.forEach((th, i) => {
-      if (this.flyOut && this.flight(i, n) >= 1 && !this.landed.has(th.id)) {
+      if (this.flight(i, n) >= 1 && !this.landed.has(th.id)) {
         this.landed.add(th.id);
-        this.pluck(th.id, 6, 0.35, 5);
+        this.pluck(th.id, 8, 0.6, 3.5); // a big, slow swing to end on
       }
     });
-    if (this.nowMs - this.flyAt > this.spread() + this.flightMs() + 50) {
-      this.stowed = !this.flyOut;
-      this.flyAt = null;
-    }
+    if (this.nowMs - this.flyAt > Renderer.SPREAD + Renderer.FLIGHT + 50) this.flyAt = null;
   }
 
   /** How big row tag ri is drawn while the tags pop in (0: not yet; a little over 1 on the way). */
@@ -201,58 +134,25 @@ export class Renderer {
     return t > STRIP + STRIP_MS + 200 && this.flyAt === null;
   }
 
-  /** The strings on their way between the box and their places, in the chosen style:
-      fling    - flung out in an arc, top end leading, bent while flying, straight as it lands;
-      fountain - shot up like a drop to the top of its place, then unrolled down like a rope;
-      thread   - bursts out of the box with confetti: each string's length shoots out of the box,
-                 up and over to the top of its place and down it, like a thread through the eye of
-                 a needle; what is not out yet is still inside the box. */
+  /** The strings on their way out of the box: each string's length shoots out of the box's
+      open top, up and over to the top of its place and down it, like a thread pulled through
+      the eye of a needle; what is not out yet is still inside the box. Most of the way goes
+      in a flash, the rest slowly, so the burst and the settling are clearly two moments. */
   private drawFlying(p: Pattern, L: Layout, xs: number[], top: number, bottom: number, colourOf: (ti: number) => string) {
     if (this.flyAt === null) return;
     const o = this.flyFrom() ?? { x: L.width / 2, y: L.height / 2 };
     const { ctx } = this, n = xs.length;
-    const clamp = (v: number) => Math.max(0, Math.min(1, v));
-    const ease = (v: number) => 1 - Math.pow(1 - clamp(v), 3);
-    const inOut = (v: number) => { v = clamp(v); return v < 0.5 ? 4 * v * v * v : 1 - Math.pow(-2 * v + 2, 3) / 2; };
     ctx.lineWidth = L.colW >= 22 ? 2 : 1.5;
     ctx.lineCap = 'round';
     p.threads.forEach((_, i) => {
       const g = this.flight(i, n);
       if (g <= 0 || g >= 1) return;
-      const X = xs[i];
-      ctx.globalAlpha = Math.min(1, g * 6) * 0.85;
+      const way = this.threadWay(o, xs[i], top, bottom), total = way.len[way.len.length - 1];
+      const head = (1 - Math.pow(1 - g, 5)) * total; // two thirds of the way in the first fifth of the time
+      ctx.globalAlpha = 0.85;
       ctx.strokeStyle = colourOf(i);
       ctx.beginPath();
-      if (this.flightStyle === 'fountain') {
-        const q = g / 0.55, hop = Math.min(220, L.height * 0.35);
-        const at = (v: number) => {
-          v = clamp(v);
-          return { x: o.x + (X - o.x) * v, y: o.y + (top - o.y) * v - hop * 4 * v * (1 - v) };
-        };
-        if (q < 1) { // a drop on its arc, with a short tail
-          const h = at(q), t = at(q - 0.12);
-          ctx.moveTo(t.x, Math.max(top, t.y));
-          ctx.lineTo(h.x, Math.max(top, h.y));
-        } else { // unrolling down from the top, its loose end swaying
-          const d = ease((g - 0.55) / 0.45), end = top + (bottom - top) * d, sway = 14 * (1 - d) * Math.sin(g * 30);
-          ctx.moveTo(X, top);
-          ctx.quadraticCurveTo(X, (top + end) / 2, X + sway, end);
-        }
-      } else if (this.flightStyle === 'thread') {
-        // The way: out of the box, up and over to the top of its place, then down it. Out, it
-        // shoots (fast, then slowing as it lands); back in, it is drawn in smoothly.
-        const way = this.threadWay(o, X, top, bottom), total = way.len[way.len.length - 1], len = bottom - top;
-        const head = (this.flyOut ? ease(g) : inOut(g)) * total;
-        this.tracePart(way, Math.max(0, head - len), head);
-      } else { // fling
-        const a = ease(g * 1.15), b = ease(g * 1.15 - 0.15); // the top leads, the bottom trails
-        const lift = Math.min(160, L.height * 0.25) * Math.sin(Math.PI * a); // up out of the box, then down onto its place
-        const tx = o.x + (X - o.x) * a, ty = Math.max(top, o.y + (top - o.y) * a - lift); // never above the grid's top
-        const bx = o.x + (X - o.x) * b, by = o.y + (bottom - o.y) * b;
-        const side = X < o.x ? -1 : 1, bend = 60 * (1 - g) * side; // whips outward while it flies
-        ctx.moveTo(tx, ty);
-        ctx.quadraticCurveTo((tx + bx) / 2 + bend, (ty + by) / 2, bx, by);
-      }
+      this.tracePart(way, Math.max(0, head - (bottom - top)), head);
       ctx.stroke();
     });
     ctx.globalAlpha = 1;
@@ -336,6 +236,7 @@ export class Renderer {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const nowMs = performance.now();
     this.nowMs = nowMs;
+    this.pattern = p;
     this.stepFlight(p);
     const dt = Math.min(0.1, (nowMs - this.last) / 1000);
     this.last = nowMs;
@@ -634,7 +535,6 @@ export class Renderer {
     this.drawStrip(p, L, s, xs);
     if (blooming) ctx.restore();
     this.drawFlying(p, L, xs, y0, y0 + span, colourOf);
-    this.drawConfetti(dt);
   }
 
   private drawStrip(p: Pattern, L: Layout, s: ViewState, xs: number[]) {

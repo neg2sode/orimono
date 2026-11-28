@@ -318,7 +318,7 @@ body.at-table .thread-tool { display: none; }
 .welcome-card li svg path { vector-effect: non-scaling-stroke; }
 body.welcoming #play { visibility: hidden; }
 
-/* First launch, about 6.5 s: the gift box drops in over the bare screen, shakes and pops open;
+/* First launch, about 7 s: the gift box drops in over the bare screen, shakes and pops open;
    the strings fly out of it to their places (drawn on the canvas, render.ts); the toolbar pops
    in piece by piece while the row tags and numbers come in; then the room dims, the card fills
    in around the box, and the welcome comes up like a title: the name, the lines, Play, the hints. */
@@ -339,7 +339,7 @@ body.intro #panel > :nth-child(7) { animation-delay: 2.9s; }
 body.intro #panel > :nth-child(8) { animation-delay: 3s; }
 body.intro .panel-end > :nth-child(1) { animation-delay: 3.1s; }
 body.intro .panel-end > :nth-child(2) { animation-delay: 3.2s; }
-body.intro #welcome { animation: backdrop-in 0.7s 3.5s both; }
+body.intro #welcome { animation: backdrop-in 0.7s 4s both; }
 
 /* The gift: an open box at the top of the card (drawn open, lid propped on its back corner).
    First launch: it drops in closed, shakes, and the lid pops open as the strings fly out. */
@@ -362,7 +362,7 @@ body.intro #gift { animation: gift-drop 0.7s 0.2s both cubic-bezier(0.3, 0.6, 0.
 body.intro .gift-all { transform-origin: 50% 100%; animation: gift-shake 0.6s 1s both; }
 body.intro .gift-lid { animation: gift-open 0.8s 1.65s both cubic-bezier(0.3, 0, 0.4, 1); }
 body.intro .gift-base { transform-origin: 50% 100%; animation: gift-squash 0.5s 1.65s both; }
-body.intro .welcome-card { animation: card-in 0.7s 3.6s both; }
+body.intro .welcome-card { animation: card-in 0.7s 4.1s both; }
 /* Tapping the box closes and opens it, just to play (main.ts). */
 #gift { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 #gift .gift-lid { transition: transform 0.3s cubic-bezier(0.3, 1.6, 0.5, 1); }
@@ -371,24 +371,27 @@ body.intro .welcome-card { animation: card-in 0.7s 3.6s both; }
 #gift.popping .gift-lid { animation: gift-open 0.8s both cubic-bezier(0.3, 0, 0.4, 1); }
 #gift.popping .gift-base { animation: gift-squash 0.5s; }
 
-/* The hints' symbols bounce in a rhythm: x x x o o, five sixteenths a cycle at the opening
-   tempo of 72, the three symbols on the first three and two to rest. They start once all
-   three are in view, a whole number of cycles in, so they keep time when the intro ends. */
-@keyframes hint-beat { 0% { transform: none; } 6% { transform: translateY(-4px) scale(1.12); } 17% { transform: none; } 100% { transform: none; } }
+/* The hints' symbols bounce in a slow rhythm: x x x o o in sixteenths at 18 BPM (a quarter of
+   the opening 72), so 0.833 s a step and 4.167 s a cycle: the three symbols on the first three
+   steps, then two to rest. They start once all three are in view, a whole number of cycles in,
+   so they keep time when the intro ends. */
+@keyframes hint-beat { 0% { transform: none; } 4% { transform: translateY(-5px) scale(1.14); } 11% { transform: none; } 100% { transform: none; } }
 @media (prefers-reduced-motion: no-preference) {
-  .welcome-card li svg { animation: hint-beat 1.0417s infinite cubic-bezier(0.3, 0.7, 0.4, 1); }
-  .welcome-card li + li svg { animation-delay: 0.2083s; } /* one sixteenth later */
-  .welcome-card li + li + li svg { animation-delay: 0.4167s; }
-  body.intro .welcome-card li svg { animation-delay: 7.2917s; } /* 7 cycles */
-  body.intro .welcome-card li + li svg { animation-delay: 7.5s; }
-  body.intro .welcome-card li + li + li svg { animation-delay: 7.7083s; }
+  .welcome-card li svg { animation: hint-beat 4.1667s infinite cubic-bezier(0.3, 0.7, 0.4, 1); }
+  .welcome-card li + li svg { animation-delay: 0.8333s; } /* one step later */
+  .welcome-card li + li + li svg { animation-delay: 1.6667s; }
+  body.intro .welcome-card li svg { animation-delay: 8.3333s; } /* 2 cycles */
+  body.intro .welcome-card li + li svg { animation-delay: 9.1667s; }
+  body.intro .welcome-card li + li + li svg { animation-delay: 10s; }
 }
-body.intro .welcome-card h1 { animation: title-in 1.1s 3.9s both cubic-bezier(0.2, 0.7, 0.2, 1); }
-body.intro .welcome-card p { animation: rise-in 0.6s 4.5s both; }
-body.intro #welcome-play { animation: pop-in 0.5s 5s both; }
-body.intro .welcome-card li { animation: rise-in 0.6s 5.4s both; }
-body.intro .welcome-card li + li { animation-delay: 5.7s; }
-body.intro .welcome-card li + li + li { animation-delay: 6s; }
+/* The confetti (confetti.ts): over everything, and never in the way of a press. */
+#confetti { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 90; pointer-events: none; }
+body.intro .welcome-card h1 { animation: title-in 1.1s 4.4s both cubic-bezier(0.2, 0.7, 0.2, 1); }
+body.intro .welcome-card p { animation: rise-in 0.6s 5s both; }
+body.intro #welcome-play { animation: pop-in 0.5s 5.5s both; }
+body.intro .welcome-card li { animation: rise-in 0.6s 5.9s both; }
+body.intro .welcome-card li + li { animation-delay: 6.2s; }
+body.intro .welcome-card li + li + li { animation-delay: 6.5s; }
 /* On the table a touch can swipe the toolbar down to pull the drawer out, and up to push it back. */
 body.at-table #panel, .drawer-lip { touch-action: none; }
 
