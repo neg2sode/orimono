@@ -340,7 +340,7 @@ if (welcoming) {
   if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
     document.body.classList.add('intro');
     renderer.bloom(giftMouth);
-    window.setTimeout(() => document.body.classList.remove('intro'), 7400);
+    window.setTimeout(() => document.body.classList.remove('intro'), 7600);
   }
   // The box can be closed and opened again, just to play. The strings stay out (letting them
   // go is one way), but every opening bursts with confetti again. (Not during the first-launch show.)
@@ -358,7 +358,22 @@ if (welcoming) {
   document.body.classList.add('welcoming');
   $('welcome').hidden = false;
   $('welcome-play').onclick = togglePlay;
-  $('welcome').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeWelcome(false); }); // a press outside the card: straight to the machine
+  // Play is what the welcome is for (on a first visit, or opening a friend's link): a press
+  // outside the card does not put it away, it only nudges Play. Putting it away takes a
+  // deliberate Skip (or Esc). A press must start and end outside the card to count as outside.
+  const welcome = $('welcome');
+  let downOutside = false;
+  welcome.addEventListener('pointerdown', (e) => { downOutside = e.target === e.currentTarget; });
+  welcome.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget && downOutside) {
+      const play = $('welcome-play');
+      play.classList.remove('nudge');
+      void play.offsetWidth; // restart the nudge
+      play.classList.add('nudge');
+    }
+    downOutside = false;
+  });
+  $('welcome-skip').onclick = () => closeWelcome(false);
 }
 
 // If Play is on but the browser has not let the sound start (or the sounds never loaded), say
