@@ -1540,7 +1540,6 @@ drawer.querySelector<HTMLElement>('.drawer-lip')!.onclick = () => setDrawer(!dra
 
 function renderShelf() {
   shelfEl.replaceChildren();
-  drawer.classList.toggle('has', shelf.fabrics.length > 0);
   shelf.fabrics.forEach((f, i) => {
     const n = f.pattern.threads.length;
     const w = Math.max(26, Math.min(220, Math.round(n * 5 * (projectBpm / (f.bpm ?? projectBpm)))));

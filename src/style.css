@@ -189,14 +189,14 @@ button:focus:not(:focus-visible) { outline: none; }
 #table[hidden] { display: none; }
 #cards { position: relative; display: flex; flex-wrap: wrap; align-content: flex-start; align-items: flex-end; row-gap: 14px; padding: 0 36px; margin: 24px 18px 80px; }
 /* The shelf is a wooden drawer built into the top of the toolbar: shut, only its front edge and
-   brass handle show (once it holds something); pulled out, it sits above the toolbar and both
-   stay in view. */
+   brass handle show (on the table, always, empty or not); pulled out, it sits above the toolbar
+   and both stay in view. It is deep (220 px inside) to leave room for what it will hold later. */
 #drawer { display: none; flex-direction: column; justify-content: flex-end; flex: none; height: 0; overflow: hidden; transition: height 0.3s cubic-bezier(0.3, 0.8, 0.3, 1);
   background: #17110c; }
 body.at-table #drawer { display: flex; }
-#drawer.has { height: 13px; }
-#drawer.open { height: 101px; }
-#shelf { flex: none; display: flex; align-items: center; gap: 10px; height: 88px; padding: 0 22px; overflow-x: auto; overflow-y: hidden;
+body.at-table #drawer { height: 13px; }
+body.at-table #drawer.open { height: 233px; }
+#shelf { flex: none; display: flex; align-items: center; gap: 10px; height: 220px; padding: 0 22px; overflow-x: auto; overflow-y: hidden;
   background:
     repeating-linear-gradient(92deg, #0000 0 17px, #00000026 17px 18px, #0000 18px 43px, #ffffff07 43px 44px),
     linear-gradient(#241a11, #2c2015);
